@@ -81,8 +81,8 @@ class MsFEMBasisFunction(object):
         Ec_vertical = (P - self.N, P) if y < Y else (P, P + self.N)
 
         # The limits of the denominator integral.
-        xL, xR = (X - self.H, X) if x < X else (X + self.H, X)
-        yL, yR = (Y - self.H, Y) if y < Y else (Y + self.H, Y)
+        xL = X - self.H if x < X else X + self.H
+        yL = Y - self.H if y < Y else Y + self.H
 
         # The limits of the numerator integral.
         x_start, x_end = xL, x
