@@ -1,5 +1,7 @@
 from scipy.sparse import lil_matrix
 from scipy.integrate import quad
+from skfem import MeshQuad, ElementQuad1, Basis, BilinearForm, LinearForm, asm, enforce
+from skfem.helpers import dot, grad
 
 
 class MsFEMBasisFunction(object):
@@ -9,32 +11,32 @@ class MsFEMBasisFunction(object):
     """
 
     def __init__(self, N, n, c):
-        """Constructor method.
+        if N > n:
+            raise ValueError("n must be greater than N")
 
-        Args:
-            N (int): Number of coarse nodes on each direction.
-            n (int): Number of nodes on each direction within each subdomain.
-            c (function): A function that computes the coefficient of the Laplace
-            equation.
-        """
-        if n < 3:
-            raise ValueError("n must be greater than 3")
-
+        # Number of coarse cells on each direction.
         self.N = N
+
+        # Number of fine cells on each direction.
         self.n = n
-        self.m = (self.N - 1) * (self.n - 1) + 1
+
+        # Coarse and fine grid cell sizes.
+        self.H = 1 / self.N
+        self.h = 1 / self.n
+
         self.c = c
-        self.H = 1 / (self.N - 1)
-        self.h = 1 / (self.m - 1)
-        self.boundary_fine_nodes = [
-            i
-            for i in range(self.m**2)
-            if i % self.m in (0, self.m - 1) or i < self.m or i >= self.m * (self.m - 1)
-        ]
-        self.coarse_edges = [
-            (v, v + 1) for v in range(self.N**2) if v % self.N != self.N - 1
-        ] + [(v, v + self.N) for v in range(self.N**2) if v // self.N < self.N - 1]
-        self.coarse_edges_integrals = {}
+
+        coarse_grid_refine_ratio = np.log2(self.N)
+        if coarse_grid_refine_ratio != int(coarse_grid_refine_ratio):
+            raise ValueError("N must be a power of 2")
+        self.coarse_grid = MeshQuad().refined(int(coarse_grid_refine_ratio))
+
+        fine_grid_refine_ratio = np.log2(self.n)
+        if fine_grid_refine_ratio != int(fine_grid_refine_ratio):
+            raise ValueError("n must be a power of 2")
+        self.fine_grid = MeshQuad().refined(int(fine_grid_refine_ratio))
+
+        self.coarse_edge_trace = {}
 
     def assemble_operator(self):
         Phi = lil_matrix((self.N**2, self.m**2))
