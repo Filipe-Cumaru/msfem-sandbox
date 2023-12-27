@@ -110,19 +110,20 @@ class MsFEMBasisFunction(object):
 
         return mu_x * mu_y
 
-    def _compute_coarse_edges_integrals(self):
-        for Ec in self.coarse_edges:
-            nc_1, nc_2 = Ec
-            xc_1, yc_1 = (nc_1 % self.N) * self.H, (nc_1 // self.N) * self.H
-            xc_2, yc_2 = (nc_2 % self.N) * self.H, (nc_2 // self.N) * self.H
+    def _compute_coarse_edges_trace(self):
+        lnodes, rnodes = self.coarse_grid.facets  # type: ignore
+
+        for nc_1, nc_2 in zip(lnodes, rnodes):
+            xc_1, yc_1 = self.coarse_grid.p[:, nc_1]
+            xc_2, yc_2 = self.coarse_grid.p[:, nc_2]
 
             # The coefficient function restricted to a single direction.
             cx = lambda x: 1 / self.c(x, yc_1)
             cy = lambda y: 1 / self.c(xc_1, y)
 
             # Horizontal edge
-            if nc_2 - nc_1 == 1:
-                self.coarse_edges_integrals[Ec] = quad(cx, xc_1, xc_2)[0]
+            if yc_1 == yc_2:
+                self.coarse_edge_trace[(nc_1, nc_2)] = quad(cx, xc_1, xc_2)[0]
             # Vertical edge
             else:
-                self.coarse_edges_integrals[Ec] = quad(cy, yc_1, yc_2)[0]
+                self.coarse_edge_trace[(nc_1, nc_2)] = quad(cy, yc_1, yc_2)[0]
