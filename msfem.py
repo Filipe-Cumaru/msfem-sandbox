@@ -58,57 +58,33 @@ class MsFEMBasisFunction(object):
     def _compute_basis_function(self, ni, nj, Ni, Nj):
         """Computes the basis function value via the boundary values.
 
-        Args:
-            Ni (int): The coarse node index on the x-axis.
-            Nj (int): The coarse node index on the y-axis.
-            ni (int): The fine node index on the x-axis.
-            nj (int): The fine node index on the x-axis.
+    def _compute_fine_edges_trace(self):
+        num_fine_edges_in_coarse_edge = int(self.H / self.h)
+        lnodes, rnodes = self.coarse_grid.facets  # type: ignore
 
-        Returns:
-            float: The basis function value at the fine node (ni, nj).
-        """
-        # The coarse node index.
-        P = Ni + self.N * Nj
+        for nc_1, nc_2 in zip(lnodes, rnodes):
+            xc_1, yc_1 = self.coarse_grid.p[:, nc_1]
+            xc_2, yc_2 = self.coarse_grid.p[:, nc_2]
 
-        # Coordinates of the coarse node.
-        X, Y = Ni * self.H, Nj * self.H
+            if xc_1 > xc_2 or yc_1 > yc_2:
+                xc_1, xc_2 = xc_2, xc_1
+                yc_1, yc_2 = yc_2, yc_1
 
-        # Coordinates of the fine-scale node.
-        x, y = ni * self.h, nj * self.h
+            # The coefficient function restricted to a single direction.
+            cx = lambda x: self.c(x, yc_1)
+            cy = lambda y: self.c(xc_1, y)
 
-        # Find the coarse edge on which the projection of the fine node
-        # lies on each direction.
-        Ec_horizontal = (P - 1, P) if x < X else (P, P + 1)
-        Ec_vertical = (P - self.N, P) if y < Y else (P, P + self.N)
+            self.fine_edge_trace[(nc_1, nc_2)] = np.zeros(num_fine_edges_in_coarse_edge)
 
-        # The limits of the denominator integral.
-        xL = X - self.H if x < X else X + self.H
-        yL = Y - self.H if y < Y else Y + self.H
-
-        # The limits of the numerator integral.
-        x_start, x_end = xL, x
-        y_start, y_end = yL, y
-
-        # The coefficient evaluated on each edge.
-        cx = lambda x: 1 / self.c(x, Y)
-        cy = lambda y: 1 / self.c(X, y)
-
-        sign_x = 1 if x < X else -1
-        sign_y = 1 if y < Y else -1
-
-        # The value of the boundary basis function on each direction.
-        mu_x = (
-            sign_x
-            * quad(cx, x_start, x_end)[0]
-            / self.coarse_edges_integrals[Ec_horizontal]
-        )
-        mu_y = (
-            sign_y
-            * quad(cy, y_start, y_end)[0]
-            / self.coarse_edges_integrals[Ec_vertical]
-        )
-
-        return mu_x * mu_y
+            for i in range(num_fine_edges_in_coarse_edge):
+                # Horizontal edge
+                if yc_1 == yc_2:
+                    xf_1, xf_2 = xc_1 + i * self.h, xc_1 + (i + 1) * self.h
+                    self.fine_edge_trace[(nc_1, nc_2)][i] = quad(cx, xf_1, xf_2)[0]
+                # Vertical edge
+                else:
+                    yf_1, yf_2 = yc_1 + i * self.h, yc_1 + (i + 1) * self.h
+                    self.fine_edge_trace[(nc_1, nc_2)][i] = quad(cy, yf_1, yf_2)[0]
 
     def _compute_coarse_edges_trace(self):
         lnodes, rnodes = self.coarse_grid.facets  # type: ignore
