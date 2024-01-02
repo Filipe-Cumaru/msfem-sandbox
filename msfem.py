@@ -45,7 +45,8 @@ class MsFEMBasisFunction(object):
             raise ValueError("n must be a power of 2")
         self.fine_grid = MeshQuad().refined(int(fine_grid_refine_ratio))
 
-        self.coarse_edge_trace = {}
+        self.coarse_edges_trace = {}
+        self.fine_edges_trace = {}
 
     def assemble_operator(self):
         Phi = lil_matrix((self.N**2, self.m**2))
@@ -83,17 +84,19 @@ class MsFEMBasisFunction(object):
             cx = lambda x: self.c(x, yc_1)
             cy = lambda y: self.c(xc_1, y)
 
-            self.fine_edge_trace[(nc_1, nc_2)] = np.zeros(num_fine_edges_in_coarse_edge)
+            self.fine_edges_trace[(nc_1, nc_2)] = np.zeros(
+                num_fine_edges_in_coarse_edge
+            )
 
             for i in range(num_fine_edges_in_coarse_edge):
                 # Horizontal edge
                 if yc_1 == yc_2:
                     xf_1, xf_2 = xc_1 + i * self.h, xc_1 + (i + 1) * self.h
-                    self.fine_edge_trace[(nc_1, nc_2)][i] = quad(cx, xf_1, xf_2)[0]
+                    self.fine_edges_trace[(nc_1, nc_2)][i] = quad(cx, xf_1, xf_2)[0]
                 # Vertical edge
                 else:
                     yf_1, yf_2 = yc_1 + i * self.h, yc_1 + (i + 1) * self.h
-                    self.fine_edge_trace[(nc_1, nc_2)][i] = quad(cy, yf_1, yf_2)[0]
+                    self.fine_edges_trace[(nc_1, nc_2)][i] = quad(cy, yf_1, yf_2)[0]
 
     def _compute_coarse_edges_trace(self):
         lnodes, rnodes = self.coarse_grid.facets  # type: ignore
@@ -108,7 +111,7 @@ class MsFEMBasisFunction(object):
 
             # Horizontal edge
             if yc_1 == yc_2:
-                self.coarse_edge_trace[(nc_1, nc_2)] = quad(cx, xc_1, xc_2)[0]
+                self.coarse_edges_trace[(nc_1, nc_2)] = quad(cx, xc_1, xc_2)[0]
             # Vertical edge
             else:
-                self.coarse_edge_trace[(nc_1, nc_2)] = quad(cy, yc_1, yc_2)[0]
+                self.coarse_edges_trace[(nc_1, nc_2)] = quad(cy, yc_1, yc_2)[0]
