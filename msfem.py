@@ -1,6 +1,15 @@
 from scipy.sparse import lil_matrix
 from scipy.integrate import quad
-from skfem import MeshQuad, ElementQuad1, Basis, BilinearForm, LinearForm, asm, enforce
+from skfem import (
+    MeshQuad,
+    ElementQuad1,
+    Basis,
+    BilinearForm,
+    LinearForm,
+    asm,
+    enforce,
+    solve,
+)
 from skfem.helpers import dot, grad
 
 
