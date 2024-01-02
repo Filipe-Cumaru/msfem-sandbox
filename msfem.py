@@ -49,24 +49,80 @@ class MsFEMBasisFunction(object):
         self.fine_edges_trace = {}
 
     def assemble_operator(self):
-        Phi = lil_matrix((self.N**2, self.m**2))
-        self._compute_coarse_edges_integrals()
-        for P in range(self.N**2):
-            Ni, Nj = P % self.N, P // self.N
-            xP, yP = Ni * self.H, Nj * self.H
-            for p in range(self.m**2):
-                ni, nj = p % self.m, p // self.m
-                xp, yp = ni * self.h, nj * self.h
-                if p not in self.boundary_fine_nodes:
-                    if xp == xP and yp == yP:
-                        Phi[P, p] = 1
-                    elif abs(xp - xP) < self.H and abs(yp - yP) < self.H:
-                        Phi[P, p] = self._compute_basis_function(ni, nj, Ni, Nj)
+        Phi = lil_matrix(((self.N + 1) ** 2, (self.n + 1) ** 2))
+        fem_basis = Basis(self.fine_grid, ElementQuad1())
+        coarse_edges = self.coarse_grid.facets[:]
+        num_fine_edges_in_coarse_edge = int(self.H / self.h)
+
+        self._compute_coarse_edges_trace()
+        self._compute_fine_edges_trace()
+
+        A_base = self._assemble_local_problem_lhs(fem_basis)
+        b_base = self._assemble_local_problem_rhs(fem_basis)
+        A_base, b_base = enforce(A_base, b_base, D=self.fine_grid.boundary_nodes())
+
+        # for P in self.coarse_grid.interior_nodes():
+        for P in range((self.N + 1) ** 2):
+            A_P, b_P = A_base.copy(), b_base[:]
+            coarse_edges_around_P = coarse_edges[
+                :, (coarse_edges[0, :] == P) | (coarse_edges[1, :] == P)
+            ]
+            fine_nodes_on_gamma = []
+            fine_nodes_trace = np.zeros(b_P.shape[0])
+
+            for nc_1, nc_2 in coarse_edges_around_P.T:
+                xc_1, yc_1 = self.coarse_grid.p[0, nc_1], self.coarse_grid.p[1, nc_1]
+                xc_2, yc_2 = self.coarse_grid.p[0, nc_2], self.coarse_grid.p[1, nc_2]
+                coarse_edge_trace = self.coarse_edges_trace[(nc_1, nc_2)]
+
+                if xc_1 > xc_2 or yc_1 > yc_2:
+                    xc_1, xc_2 = xc_2, xc_1
+                    yc_1, yc_2 = yc_2, yc_1
+
+                for i in range(1, num_fine_edges_in_coarse_edge):
+                    # Horizontal edge
+                    if yc_1 == yc_2:
+                        xf = xc_1 + i * self.h
+                        nf = fem_basis.nodal_dofs[
+                            0,
+                            (self.fine_grid.p[0] == xf) & (self.fine_grid.p[1] == yc_1),
+                        ][0]
+                    # Vertical edge
+                    else:
+                        yf = yc_1 + i * self.h
+                        nf = fem_basis.nodal_dofs[
+                            0,
+                            (self.fine_grid.p[0] == xc_1) & (self.fine_grid.p[1] == yf),
+                        ][0]
+
+                    fine_nodes_on_gamma.append(nf)
+                    fine_nodes_trace[nf] = (
+                        self.fine_edges_trace[(nc_1, nc_2)][:i].sum()
+                        / coarse_edge_trace
+                    )
+
+            fine_nodes_on_gamma = np.array(fine_nodes_on_gamma)
+            A_P, b_P = enforce(A_P, b_P, D=fine_nodes_on_gamma, x=fine_nodes_trace)
+
+            # TODO: Enforce the Kronecker's delta property.
+            Phi[P, :] = solve(A_P, b_P)
+
         Phi = Phi.tocsc()
         return Phi
 
-    def _compute_basis_function(self, ni, nj, Ni, Nj):
-        """Computes the basis function value via the boundary values.
+    def _assemble_local_problem_lhs(self, basis):
+        @BilinearForm
+        def bilinear_form(u, v, w):
+            return dot(self.c(w.x[0], w.x[1]) * grad(u), grad(v))
+
+        return asm(bilinear_form, basis)
+
+    def _assemble_local_problem_rhs(self, basis):
+        @LinearForm
+        def linear_form(v, _):
+            return 0
+
+        return asm(linear_form, basis)
 
     def _compute_fine_edges_trace(self):
         num_fine_edges_in_coarse_edge = int(self.H / self.h)
