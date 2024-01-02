@@ -51,7 +51,12 @@ class MsFEMBasisFunction(object):
     def assemble_operator(self):
         Phi = lil_matrix(((self.N + 1) ** 2, (self.n + 1) ** 2))
         fem_basis = Basis(self.fine_grid, ElementQuad1())
-        coarse_edges = self.coarse_grid.facets[:]
+
+        n_coarse_edges = self.coarse_grid.facets.shape[1]
+        in_coarse_edges_idx = np.setdiff1d(
+            np.arange(n_coarse_edges), self.coarse_grid.boundary_facets()
+        )
+        in_coarse_edges = self.coarse_grid.facets[:, in_coarse_edges_idx]
         num_fine_edges_in_coarse_edge = int(self.H / self.h)
 
         self._compute_coarse_edges_trace()
@@ -61,11 +66,14 @@ class MsFEMBasisFunction(object):
         b_base = self._assemble_local_problem_rhs(fem_basis)
         A_base, b_base = enforce(A_base, b_base, D=self.fine_grid.boundary_nodes())
 
-        # for P in self.coarse_grid.interior_nodes():
         for P in range((self.N + 1) ** 2):
             A_P, b_P = A_base.copy(), b_base[:]
-            coarse_edges_around_P = coarse_edges[
-                :, (coarse_edges[0, :] == P) | (coarse_edges[1, :] == P)
+            coarse_edges_around_P = in_coarse_edges[
+                :, (in_coarse_edges[0, :] == P) | (in_coarse_edges[1, :] == P)
+            ]
+            P_x, P_y = self.coarse_grid.p[:, P]
+            P_fine_idx = fem_basis.dofs.nodal_dofs[
+                0, (self.fine_grid.p[0, :] == P_x) & (self.fine_grid.p[1, :] == P_y)
             ]
             fine_nodes_on_gamma = []
             fine_nodes_trace = np.zeros(b_P.shape[0])
@@ -101,10 +109,14 @@ class MsFEMBasisFunction(object):
                         / coarse_edge_trace
                     )
 
-            fine_nodes_on_gamma = np.array(fine_nodes_on_gamma)
-            A_P, b_P = enforce(A_P, b_P, D=fine_nodes_on_gamma, x=fine_nodes_trace)
+            if len(fine_nodes_on_gamma) > 0:
+                fine_nodes_on_gamma = np.array(fine_nodes_on_gamma)
+                A_P, b_P = enforce(A_P, b_P, D=fine_nodes_on_gamma, x=fine_nodes_trace)
+            else:
+                kronecker_delta = np.zeros(self.fine_grid.p.shape[1])
+                kronecker_delta[P_fine_idx] = 1
+                A_P, b_P = enforce(A_P, b_P, D=P_fine_idx, x=kronecker_delta)
 
-            # TODO: Enforce the Kronecker's delta property.
             Phi[P, :] = solve(A_P, b_P)
 
         Phi = Phi.tocsc()
