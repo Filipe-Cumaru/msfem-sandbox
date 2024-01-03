@@ -112,7 +112,7 @@ class MsFEMBasisFunction(object):
             if len(fine_nodes_on_gamma) > 0:
                 fine_nodes_on_gamma = np.array(fine_nodes_on_gamma)
                 A_P, b_P = enforce(A_P, b_P, D=fine_nodes_on_gamma, x=fine_nodes_trace)
-            else:
+            if P_fine_idx not in self.fine_grid.boundary_nodes():
                 kronecker_delta = np.zeros(self.fine_grid.p.shape[1])
                 kronecker_delta[P_fine_idx] = 1
                 A_P, b_P = enforce(A_P, b_P, D=P_fine_idx, x=kronecker_delta)
