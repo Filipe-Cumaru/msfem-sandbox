@@ -49,59 +49,77 @@ class MsFEMBasisFunction(object):
         self.fine_edges_trace = {}
 
     def assemble_operator(self):
+        # Initialization of the prolongation operator.
         Phi = lil_matrix(((self.N + 1) ** 2, (self.n + 1) ** 2))
+
+        # The FEM basis used for the fine-scale grid. Bilinear elements
+        # are used to discretize and solve the local problems.
         fem_basis = Basis(self.fine_grid, ElementQuad1())
 
+        # Retrieving the internal coarse-scale edges, i.e., the support
+        # boundary \Gamma.
         n_coarse_edges = self.coarse_grid.facets.shape[1]
         in_coarse_edges_idx = np.setdiff1d(
             np.arange(n_coarse_edges), self.coarse_grid.boundary_facets()
         )
-        in_coarse_edges = self.coarse_grid.facets[:, in_coarse_edges_idx]
+
         num_fine_edges_in_coarse_edge = int(self.H / self.h)
 
+        # Computes the trace function values on \Gamma.
         self._compute_coarse_edges_trace()
         self._compute_fine_edges_trace()
 
+        # The local problems are assembled once since the only changes for each
+        # coarse-scale node are the boundary conditions.
         A_base = self._assemble_local_problem_lhs(fem_basis)
         b_base = self._assemble_local_problem_rhs(fem_basis)
         A_base, b_base = enforce(A_base, b_base, D=self.fine_grid.boundary_nodes())
 
         for P in range((self.N + 1) ** 2):
             A_P, b_P = A_base.copy(), b_base[:]
-            coarse_edges_around_P = in_coarse_edges[
-                :, (in_coarse_edges[0, :] == P) | (in_coarse_edges[1, :] == P)
-            ]
+
             P_x, P_y = self.coarse_grid.p[:, P]
             P_fine_idx = fem_basis.dofs.nodal_dofs[
                 0, (self.fine_grid.p[0, :] == P_x) & (self.fine_grid.p[1, :] == P_y)
             ]
+
+            # Find the coarse edges sharing an element that contains P.
+            coarse_edges_idx_around_P = self.coarse_grid.facets_satisfying(
+                lambda X: ((X[0] >= P_x - self.H) & (X[0] <= P_x + self.H))
+                & ((X[1] >= P_y - self.H) & (X[1] <= P_y + self.H))
+            )
+            in_coarse_edges_idx_around_P = np.intersect1d(
+                in_coarse_edges_idx, coarse_edges_idx_around_P
+            )
+            in_coarse_edges_around_P = self.coarse_grid.facets[
+                :, in_coarse_edges_idx_around_P
+            ]
+
             fine_nodes_on_gamma = []
             fine_nodes_trace = np.zeros(b_P.shape[0])
 
-            for nc_1, nc_2 in coarse_edges_around_P.T:
+            for nc_1, nc_2 in in_coarse_edges_around_P.T:
                 xc_1, yc_1 = self.coarse_grid.p[0, nc_1], self.coarse_grid.p[1, nc_1]
                 xc_2, yc_2 = self.coarse_grid.p[0, nc_2], self.coarse_grid.p[1, nc_2]
                 coarse_edge_trace = self.coarse_edges_trace[(nc_1, nc_2)]
 
+                # Reorder the edge's endpoints so that they are always sorted
+                # from the left to the right and from bottom to top, i.e., on
+                # the positive sense of the coordinate axis.
                 if xc_1 > xc_2 or yc_1 > yc_2:
                     xc_1, xc_2 = xc_2, xc_1
                     yc_1, yc_2 = yc_2, yc_1
 
                 for i in range(1, num_fine_edges_in_coarse_edge):
-                    # Horizontal edge
-                    if yc_1 == yc_2:
-                        xf = xc_1 + i * self.h
-                        nf = fem_basis.nodal_dofs[
-                            0,
-                            (self.fine_grid.p[0] == xf) & (self.fine_grid.p[1] == yc_1),
-                        ][0]
-                    # Vertical edge
-                    else:
-                        yf = yc_1 + i * self.h
-                        nf = fem_basis.nodal_dofs[
-                            0,
-                            (self.fine_grid.p[0] == xc_1) & (self.fine_grid.p[1] == yf),
-                        ][0]
+                    xf, yf = (
+                        (xc_1 + i * self.h, yc_1)
+                        if yc_1 == yc_2
+                        else (xc_1, yc_1 + i * self.h)
+                    )
+                    nf = fem_basis.nodal_dofs[
+                        0,
+                        (self.fine_grid.p[0] == xf) & (self.fine_grid.p[1] == yf),
+                    ][0]
 
                     fine_nodes_on_gamma.append(nf)
                     fine_nodes_trace[nf] = (
