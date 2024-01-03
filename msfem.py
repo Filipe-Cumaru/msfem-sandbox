@@ -149,8 +149,8 @@ class MsFEMBasisFunction(object):
                 yc_1, yc_2 = yc_2, yc_1
 
             # The coefficient function restricted to a single direction.
-            cx = lambda x: self.c(x, yc_1)
-            cy = lambda y: self.c(xc_1, y)
+            cx = lambda x: 1 / self.c(x, yc_1)
+            cy = lambda y: 1 / self.c(xc_1, y)
 
             self.fine_edges_trace[(nc_1, nc_2)] = np.zeros(
                 num_fine_edges_in_coarse_edge
