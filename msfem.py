@@ -89,8 +89,8 @@ class MsFEMBasisFunction(object):
         y_start, y_end = yL, y
 
         # The coefficient evaluated on each edge.
-        cx = lambda x: self.c(x, Y)
-        cy = lambda y: self.c(X, y)
+        cx = lambda x: 1 / self.c(x, Y)
+        cy = lambda y: 1 / self.c(X, y)
 
         sign_x = 1 if x < X else -1
         sign_y = 1 if y < Y else -1
@@ -116,8 +116,8 @@ class MsFEMBasisFunction(object):
             xc_2, yc_2 = (nc_2 % self.N) * self.H, (nc_2 // self.N) * self.H
 
             # The coefficient function restricted to a single direction.
-            cx = lambda x: self.c(x, yc_1)
-            cy = lambda y: self.c(xc_1, y)
+            cx = lambda x: 1 / self.c(x, yc_1)
+            cy = lambda y: 1 / self.c(xc_1, y)
 
             # Horizontal edge
             if nc_2 - nc_1 == 1:
