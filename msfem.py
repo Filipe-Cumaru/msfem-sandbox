@@ -1,3 +1,4 @@
+import numpy as np
 from scipy.sparse import lil_matrix
 from scipy.integrate import quad
 from skfem import (
