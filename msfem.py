@@ -1,6 +1,5 @@
-import numpy as np
 from scipy.sparse import lil_matrix
-from scipy.integrate import quad, fixed_quad
+from scipy.integrate import quad
 
 
 class MsFEMBasisFunction(object):
