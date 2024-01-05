@@ -144,6 +144,26 @@ class BaseTwoLevelASPreconditioner(object):
             (P_values, (row_idx, col_idx)), shape=(self.m**2, self.N**2)
         )
 
+    def _compute_overlap(self, Omega_i, l):
+        """Computes the overlapping extension of subdomain \Omega_i
+        into l levels.
+
+        Args:
+            Omega_i (numpy.ndarray): The non-overlapping subdomain.
+            l (int): The number of overlapping layers.
+
+        Returns:
+            numpy.ndarray: The set of nodes comprising the extended subdomain.
+        """
+        if l == 1:
+            Omega_i_neighbors = self.M[Omega_i, :].nonzero()[1]
+            Omega_i_extended = np.union1d(Omega_i, Omega_i_neighbors)
+        else:
+            Omega_i_prev = self._compute_overlap(Omega_i, l - 1)
+            Omega_i_prev_neighbors = self.M[Omega_i_prev, :].nonzero()[1]
+            Omega_i_extended = np.union1d(Omega_i_prev, Omega_i_prev_neighbors)
+        return Omega_i_extended
+
 
 class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
     def __init__(self, A, Phi, N, n, k) -> None:
