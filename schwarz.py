@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import inv
 
 
 class BaseTwoLevelASPreconditioner(object):
@@ -170,7 +171,28 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
         super().__init__(A, Phi, N, n, k)
 
     def assemble(self):
-        return super().assemble()
+        # The first level AS preconditioner.
+        M_as_1 = csc_matrix((self.m**2, self.m**2))
+        for i in range(self.N**2):
+            Omega_i = self.P[:, i].nonzero()[0]
+            Omega_i_extended = self._compute_overlap(Omega_i, self.k)
+            A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
+            A_i_inv = inv(A_i)
+            row_idx, col_idx = A_i_inv.nonzero()
+            A_i_prolonged = csc_matrix(
+                (A_i_inv.data, (Omega_i_extended[row_idx], Omega_i_extended[col_idx])),
+                shape=(self.m**2, self.m**2),
+            )
+            M_as_1 += A_i_prolonged
+
+        # The second level preconditioner.
+        A_0 = self.Phi @ (self.A @ self.Phi.transpose())
+        M_as_2 = self.Phi.transpose() @ (inv(A_0) @ self.Phi)
+
+        # The additive two-level preconditioner.
+        M_as = M_as_1 + M_as_2
+
+        return M_as
 
 
 class TwoLevelRASPreconditioner(BaseTwoLevelASPreconditioner):
