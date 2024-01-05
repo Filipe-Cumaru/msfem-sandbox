@@ -14,9 +14,104 @@ class BaseTwoLevelASPreconditioner(object):
         self.H = 1 / self.N
         self.h = 1 / self.n
         self.P = None
+        self.M = None
 
     def assemble(self):
         raise NotImplementedError()
+
+    def _set_connectivity_matrix(self):
+        """Sets `M`, the connectivity matrix indicating which nodes are
+        neighbors, i.e., M_{ij} = 1 if i and j are neighbors.
+        """
+        # Internal nodes
+        inodes = np.array(
+            [
+                i
+                for i in range(self.m**2)
+                if i % self.m not in (0, self.m - 1)
+                and i // self.m not in (0, self.m - 1)
+            ]
+        )
+
+        # Boundary nodes
+        bnodes = np.setdiff1d(np.arange(self.m**2), inodes)
+
+        corner_nodes = np.array([0, self.m - 1, self.m * (self.m - 1), self.m**2 - 1])
+
+        # Boundary nodes split into each facet of the domain.
+        left_bnodes = np.array(
+            [i for i in bnodes if i not in corner_nodes and i % self.m == 0]
+        )
+        right_bnodes = np.array(
+            [i for i in bnodes if i not in corner_nodes and i % self.m == self.m - 1]
+        )
+        bottom_bnodes = np.array(
+            [i for i in bnodes if i not in corner_nodes and i // self.m == 0]
+        )
+        top_bnodes = np.array(
+            [i for i in bnodes if i not in corner_nodes and i // self.m == self.m - 1]
+        )
+
+        row_idx = []
+        col_idx = []
+
+        # Internal nodes neighbors
+        row_idx.extend(np.tile(inodes, 4))
+        col_idx.extend(
+            np.concatenate((inodes - 1, inodes + 1, inodes - self.m, inodes + self.m))
+        )
+
+        # Left boundary nodes neighbors (except corner nodes)
+        row_idx.extend(np.tile(left_bnodes, 3))
+        col_idx.extend(
+            np.concatenate(
+                (left_bnodes + 1, left_bnodes - self.m, left_bnodes + self.m)
+            )
+        )
+
+        # Right boundary nodes neighbors (except corner nodes)
+        row_idx.extend(np.tile(right_bnodes, 3))
+        col_idx.extend(
+            np.concatenate(
+                (right_bnodes - 1, right_bnodes - self.m, right_bnodes + self.m)
+            )
+        )
+
+        # Bottom boundary nodes neighbors (except corner nodes)
+        row_idx.extend(np.tile(bottom_bnodes, 3))
+        col_idx.extend(
+            np.concatenate(
+                (bottom_bnodes + 1, bottom_bnodes - 1, bottom_bnodes + self.m)
+            )
+        )
+
+        # Top boundary nodes neighbors (except corner nodes)
+        row_idx.extend(np.tile(top_bnodes, 3))
+        col_idx.extend(
+            np.concatenate((top_bnodes + 1, top_bnodes - 1, top_bnodes - self.m))
+        )
+
+        # Bottom left corner
+        row_idx.extend([0] * 2)
+        col_idx.extend([1, self.m])
+
+        # Bottom right corner
+        row_idx.extend([self.m - 1] * 2)
+        col_idx.extend([self.m - 2, 2 * self.m - 1])
+
+        # Top left corner
+        row_idx.extend([self.m * (self.m - 1)] * 2)
+        col_idx.extend([self.m * (self.m - 2), self.m * (self.m - 1) + 1])
+
+        # Top right corner
+        row_idx.extend([self.m**2 - 1] * 2)
+        col_idx.extend([self.m * (self.m - 1) - 1, self.m**2 - 2])
+
+        M_values = np.ones(len(row_idx), dtype=int)
+
+        self.M = csc_matrix(
+            (M_values, (row_idx, col_idx)), shape=(self.m**2, self.m**2)
+        )
 
     def _compute_partitions(self):
         """Sets `P`, a matrix that indicates the partition of the domain's
