@@ -4,17 +4,40 @@ from scipy.sparse.linalg import inv
 
 
 class BaseTwoLevelASPreconditioner(object):
+    """Base class used to implement the variants of the
+    two-level Additive Schwarz preconditioner.
+    """
+
     def __init__(self, A, Phi, N, n, k) -> None:
+        """Constructor
+
+        Args:
+            A (sparse matrix): The matrix of the linear system.
+            Phi (sparse matrix): The MsFEM prolongation operator,
+                i.e., the assembled basis functions.
+            N (int): Number of subdomains on each direction.
+            n (int): Number of cells per subdomain on each direction.
+            k (int): Number of layers for the overlap.
+        """
         self.A = A
         self.Phi = Phi
         self.N = N
         self.n = n
         self.k = k
 
+        # Number of nodes on each direction for the global domain.
         self.m = self.N * self.n + 1
+
+        # Coarse grid size.
         self.H = 1 / self.N
+
+        # Fine grid size.
         self.h = 1 / self.n
+
+        # A partition vector that splits the nodes into each subdmain.
         self.P = self._compute_partitions()
+
+        # A connectivity matrix indicating which nodes are neighbors.
         self.M = (self.A != 0).astype(int)
 
     def assemble(self):
@@ -73,17 +96,35 @@ class BaseTwoLevelASPreconditioner(object):
 
 
 class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
+    """An implementation of the two-level Additive Schwarz (AS)
+    preconditioner using MsFEM basis functions as a coarse space.
+    """
+
     def __init__(self, A, Phi, N, n, k) -> None:
         super().__init__(A, Phi, N, n, k)
 
     def assemble(self):
+        """Assembles the two-level AS preconditioner.
+
+        Returns:
+            scipy.sparse.csc_matrix: The inverse of the two-level AS preconditioner.
+        """
         # The first level AS preconditioner.
         M_as_1 = csc_matrix((self.m**2, self.m**2))
         for i in range(self.N**2):
+            # First, retrieve the nodes in the subdomain.
             Omega_i = self.P[:, i].nonzero()[0]
+
+            # Compute the overlapping subdomain.
             Omega_i_extended = self._compute_overlap(Omega_i, self.k)
+
+            # Extract and invert the matrix block corresponding to the
+            # extended subdomain.
             A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
             A_i_inv = inv(A_i)
+
+            # Project the local matrix back to the global domain and
+            # add the result to first level preconditioner.
             row_idx, col_idx = A_i_inv.nonzero()
             A_i_prolonged = csc_matrix(
                 (A_i_inv.data, (Omega_i_extended[row_idx], Omega_i_extended[col_idx])),
@@ -102,24 +143,42 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
 
 
 class TwoLevelRASPreconditioner(BaseTwoLevelASPreconditioner):
+    """An implementation of the two-level Restricted Additive Schwarz
+    (RAS) preconditioner using MsFEM basis functions as a coarse space.
+    """
+
     def __init__(self, A, Phi, N, n, k) -> None:
         super().__init__(A, Phi, N, n, k)
 
     def assemble(self):
+        """Assembles the two-level RAS preconditioner.
+
+        Returns:
+            scipy.sparse.csc_matrix: The inverse of the two-level RAS preconditioner.
+        """
         # The first level RAS preconditioner.
         M_ras_1 = csc_matrix((self.m**2, self.m**2))
         for i in range(self.N**2):
+            # First, retrieve the nodes in the subdomain.
             Omega_i = self.P[:, i].nonzero()[0]
+
+            # Compute the overlapping extension of the subdomain.
             Omega_i_extended = self._compute_overlap(Omega_i, self.k)
 
+            # Extract and invert the matrix block corresponding to the
+            # extended subdomain.
             A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
             A_i_inv = inv(A_i)
 
+            # Project the local inverse to the global domain.
             row_idx, col_idx = A_i_inv.nonzero()
             A_i_prolonged_ext = csc_matrix(
                 (A_i_inv.data, (Omega_i_extended[row_idx], Omega_i_extended[col_idx])),
                 shape=(self.m**2, self.m**2),
             )
+
+            # Add to the total preconditioner the contribution of the nodes
+            # within the non-overlapping subdomain.
             M_ras_1[Omega_i, Omega_i[:, None]] += A_i_prolonged_ext[
                 Omega_i, Omega_i[:, None]
             ]
