@@ -104,3 +104,31 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
 class TwoLevelRASPreconditioner(BaseTwoLevelASPreconditioner):
     def __init__(self, A, Phi, N, n, k) -> None:
         super().__init__(A, Phi, N, n, k)
+
+    def assemble(self):
+        # The first level RAS preconditioner.
+        M_ras_1 = csc_matrix((self.m**2, self.m**2))
+        for i in range(self.N**2):
+            Omega_i = self.P[:, i].nonzero()[0]
+            Omega_i_extended = self._compute_overlap(Omega_i, self.k)
+
+            A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
+            A_i_inv = inv(A_i)
+
+            row_idx, col_idx = A_i_inv.nonzero()
+            A_i_prolonged_ext = csc_matrix(
+                (A_i_inv.data, (Omega_i_extended[row_idx], Omega_i_extended[col_idx])),
+                shape=(self.m**2, self.m**2),
+            )
+            M_ras_1[Omega_i, Omega_i[:, None]] += A_i_prolonged_ext[
+                Omega_i, Omega_i[:, None]
+            ]
+
+        # The second level preconditioner.
+        A_0 = self.Phi @ (self.A @ self.Phi.transpose())
+        M_ras_2 = self.Phi.transpose() @ (inv(A_0) @ self.Phi)
+
+        # The additive two-level preconditioner.
+        M_ras = M_ras_1 + M_ras_2
+
+        return M_ras
