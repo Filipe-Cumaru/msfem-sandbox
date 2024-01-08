@@ -14,7 +14,7 @@ class BaseTwoLevelASPreconditioner(object):
         self.m = self.N * self.n + 1
         self.H = 1 / self.N
         self.h = 1 / self.n
-        self.P = None
+        self.P = self._compute_partitions()
         self.M = (self.A != 0).astype(int)
 
     def assemble(self):
@@ -47,7 +47,7 @@ class BaseTwoLevelASPreconditioner(object):
             col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
             P_values.extend(np.ones(len(Omega_i)))
 
-        self.P = csc_matrix(
+        return csc_matrix(
             (P_values, (row_idx, col_idx)), shape=(self.m**2, self.N**2)
         )
 
