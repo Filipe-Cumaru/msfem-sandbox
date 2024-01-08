@@ -134,7 +134,7 @@ class BaseTwoLevelASPreconditioner(object):
 
             # The nodes in the subdomain \Omega_i.
             Omega_i = (
-                ref_window + (displ_horiz * self.N) + (displ_vert * self.n * self.m)
+                ref_window + (displ_horiz * self.n) + (displ_vert * self.n * self.m)
             )
 
             row_idx.extend(Omega_i)
