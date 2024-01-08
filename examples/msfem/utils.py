@@ -35,10 +35,10 @@ def run_example(input_dir, N, m, c):
     print("--------# 1. Computing the basis functions.")
     Phi = msfem_bf.assemble_operator()
 
-    A = load_npz(f"../data/{input_dir}/lhs_{m - 1}x{m - 1}.npz")
-    b = np.load(f"../data/{input_dir}/rhs_{m - 1}x{m - 1}.npy")
+    A = load_npz(f"../../data/{input_dir}/lhs_{m - 1}x{m - 1}.npz")
+    b = np.load(f"../../data/{input_dir}/rhs_{m - 1}x{m - 1}.npy")
 
-    fine_grid = np.load(f"../data/{input_dir}/grid_{m - 1}x{m - 1}.npy")
+    fine_grid = np.load(f"../../data/{input_dir}/grid_{m - 1}x{m - 1}.npy")
     xs, ys = np.meshgrid(np.linspace(0, 1, msfem_bf.m), np.linspace(0, 1, msfem_bf.m))
 
     idx = sort_ext_indices(fine_grid, xs.flatten(), ys.flatten())
