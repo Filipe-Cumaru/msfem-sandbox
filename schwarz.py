@@ -202,7 +202,7 @@ class TwoLevelSASPreconditioner(BaseTwoLevelASPreconditioner):
         super().__init__(A, Phi, N, n, k)
 
     def assemble(self):
-        """Assembles the two-level RAS preconditioner.
+        """Assembles the two-level SAS preconditioner.
 
         Returns:
             scipy.sparse.csc_matrix: The inverse of the two-level SAS preconditioner.
