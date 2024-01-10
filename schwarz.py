@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.sparse import csc_matrix
+from scipy.sparse import csc_matrix, diags
 from scipy.sparse.linalg import inv
 
 
@@ -191,3 +191,58 @@ class TwoLevelRASPreconditioner(BaseTwoLevelASPreconditioner):
         M_ras = M_ras_1 + M_ras_2
 
         return M_ras
+
+
+class TwoLevelSASPreconditioner(BaseTwoLevelASPreconditioner):
+    """An implementation of the two-level Scaled Additive Schwarz
+    (SAS) preconditioner using MsFEM basis functions as a coarse space.
+    """
+
+    def __init__(self, A, Phi, N, n, k) -> None:
+        super().__init__(A, Phi, N, n, k)
+
+    def assemble(self):
+        """Assembles the two-level RAS preconditioner.
+
+        Returns:
+            scipy.sparse.csc_matrix: The inverse of the two-level SAS preconditioner.
+        """
+        # The first level RAS preconditioner.
+        M_sas_1 = csc_matrix((self.m**2, self.m**2))
+        for i in range(self.N**2):
+            # First, retrieve the nodes in the subdomain.
+            Omega_i = self.P[:, i].nonzero()[0]
+
+            # Compute the overlapping extension of the subdomain.
+            Omega_i_extended = self._compute_overlap(Omega_i, self.k)
+
+            # Extract and invert the matrix block corresponding to the
+            # extended subdomain.
+            A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
+            A_i_inv = inv(A_i)
+
+            # Project the local inverse to the global domain.
+            row_idx, col_idx = A_i_inv.nonzero()
+            A_i_prolonged_ext = csc_matrix(
+                (A_i_inv.data, (Omega_i_extended[row_idx], Omega_i_extended[col_idx])),
+                shape=(self.m**2, self.m**2),
+            )
+
+            # Scale the local contribution of each node in the non-overlapping
+            # subdomain by their inverse multiplicity.
+            node_multiplicity = np.asarray(self.P[Omega_i, :].sum(axis=1)).flatten()
+            W = diags(node_multiplicity**-1)
+            A_i_scaled = W @ A_i_prolonged_ext[Omega_i, Omega_i[:, None]]
+
+            # Add to the total preconditioner the contribution of the nodes
+            # within the non-overlapping subdomain.
+            M_sas_1[Omega_i, Omega_i[:, None]] += A_i_scaled
+
+        # The second level preconditioner.
+        A_0 = self.Phi @ (self.A @ self.Phi.transpose())
+        M_sas_2 = self.Phi.transpose() @ (inv(A_0) @ self.Phi)
+
+        # The additive two-level preconditioner.
+        M_sas = M_sas_1 + M_sas_2
+
+        return M_sas
