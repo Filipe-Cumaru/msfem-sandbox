@@ -207,7 +207,7 @@ class TwoLevelSASPreconditioner(BaseTwoLevelASPreconditioner):
         Returns:
             scipy.sparse.csc_matrix: The inverse of the two-level SAS preconditioner.
         """
-        # The first level RAS preconditioner.
+        # The first level SAS preconditioner.
         M_sas_1 = csc_matrix((self.m**2, self.m**2))
         for i in range(self.N**2):
             # First, retrieve the nodes in the subdomain.
