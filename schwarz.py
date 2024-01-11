@@ -149,6 +149,32 @@ class TwoLevelRASPreconditioner(BaseTwoLevelASPreconditioner):
 
     def __init__(self, A, Phi, N, n, k) -> None:
         super().__init__(A, Phi, N, n, k)
+        self.P_unique = self._compute_unique_partition()
+
+    def _compute_unique_partition(self):
+        row_idx = -np.ones(self.m**2, dtype=int)
+        col_idx = -np.ones(self.m**2, dtype=int)
+        it = 0
+
+        for j in range(self.N**2):
+            Omega_i = self.P[:, j].nonzero()[0]
+            Omega_i_interior = Omega_i[self.P[Omega_i, :].sum(axis=1).A.flatten() == 1]
+            row_idx[it : (it + len(Omega_i_interior))] = Omega_i_interior[:]
+            col_idx[it : (it + len(Omega_i_interior))] = j
+            it += len(Omega_i_interior)
+
+        Gamma = np.where(self.P.sum(axis=1).A.flatten() > 1)[0]
+        for xk in Gamma:
+            subdomains_sharing_xk = self.P[xk, :].nonzero()[1]
+            j = np.argmin([np.sum(col_idx == i) for i in subdomains_sharing_xk])
+            row_idx[it] = xk
+            col_idx[it] = subdomains_sharing_xk[j]
+            it += 1
+
+        return csc_matrix(
+            (np.ones(self.m**2), (row_idx, col_idx)),
+            shape=(self.m**2, self.N**2),
+        )
 
     def assemble(self):
         """Assembles the two-level RAS preconditioner.
@@ -161,6 +187,9 @@ class TwoLevelRASPreconditioner(BaseTwoLevelASPreconditioner):
         for i in range(self.N**2):
             # First, retrieve the nodes in the subdomain.
             Omega_i = self.P[:, i].nonzero()[0]
+
+            # Retrieve the nodes in the unique partition.
+            Omega_i_unique = self.P_unique[:, i].nonzero()[0]
 
             # Compute the overlapping extension of the subdomain.
             Omega_i_extended = self._compute_overlap(Omega_i, self.k)
@@ -179,8 +208,8 @@ class TwoLevelRASPreconditioner(BaseTwoLevelASPreconditioner):
 
             # Add to the total preconditioner the contribution of the nodes
             # within the non-overlapping subdomain.
-            M_ras_1[Omega_i, Omega_i[:, None]] += A_i_prolonged_ext[
-                Omega_i, Omega_i[:, None]
+            M_ras_1[Omega_i_unique, Omega_i_unique[:, None]] += A_i_prolonged_ext[
+                Omega_i_unique, Omega_i_unique[:, None]
             ]
 
         # The second level preconditioner.
