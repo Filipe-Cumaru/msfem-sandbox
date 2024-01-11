@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse import csc_matrix, diags
-from scipy.sparse.linalg import inv
+from scipy.sparse.linalg import inv, spsolve
 
 
 class BaseTwoLevelASPreconditioner(object):
@@ -122,43 +122,33 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
     def __init__(self, A, Phi, N, n, k) -> None:
         super().__init__(A, Phi, N, n, k)
 
-    def assemble(self):
-        """Assembles the two-level AS preconditioner.
+    def apply(self, x):
+        """Applies the two-level AS preconditioner to the current iterate
+        of a solver.
+
+        Args:
+            x (numpy.ndarray): The current iterate of the solver.
 
         Returns:
-            scipy.sparse.csc_matrix: The inverse of the two-level AS preconditioner.
+            numpy.ndarray: The preconditioned iterate.
         """
-        # The first level AS preconditioner.
-        M_as_1 = csc_matrix((self.m**2, self.m**2))
+        y = np.zeros(self.m**2)
+
+        # First level.
         for i in range(self.N**2):
-            # First, retrieve the nodes in the subdomain.
-            Omega_i = self.P[:, i].nonzero()[0]
-
-            # Compute the overlapping subdomain.
-            Omega_i_extended = self._compute_overlap(Omega_i, self.k)
-
-            # Extract and invert the matrix block corresponding to the
-            # extended subdomain.
+            Omega_i_extended = self.P_extended[:, i].nonzero()[0]
             A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
-            A_i_inv = inv(A_i)
+            x_i = x[Omega_i_extended]
+            y_i = spsolve(A_i, x_i)
+            y[Omega_i_extended] += y_i            
 
-            # Project the local matrix back to the global domain and
-            # add the result to first level preconditioner.
-            row_idx, col_idx = A_i_inv.nonzero()
-            A_i_prolonged = csc_matrix(
-                (A_i_inv.data, (Omega_i_extended[row_idx], Omega_i_extended[col_idx])),
-                shape=(self.m**2, self.m**2),
-            )
-            M_as_1 += A_i_prolonged
-
-        # The second level preconditioner.
+        # Second level.
         A_0 = self.Phi @ (self.A @ self.Phi.transpose())
-        M_as_2 = self.Phi.transpose() @ (inv(A_0) @ self.Phi)
+        x_0 = self.Phi @ x
+        y_0 = spsolve(A_0, x_0)
+        y += self.Phi.transpose() @ y_0
 
-        # The additive two-level preconditioner.
-        M_as = M_as_1 + M_as_2
-
-        return M_as
+        return y
 
 
 class TwoLevelRASPreconditioner(BaseTwoLevelASPreconditioner):
