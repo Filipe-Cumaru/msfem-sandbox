@@ -34,14 +34,14 @@ class BaseTwoLevelASPreconditioner(object):
         # Fine grid size.
         self.h = 1 / self.n
 
-        # A partition vector that splits the nodes into each subdmain.
-        self.P = self._compute_partitions()
-
         # A connectivity matrix indicating which nodes are neighbors.
         self.M = (self.A != 0).astype(int)
 
-    def assemble(self):
-        raise NotImplementedError()
+        # A partition vector that splits the nodes into each subdmain.
+        self.P = self._compute_partitions()
+
+        # A partition vector that splits the nodes into the overlapping subdmains.
+        self.P_extended = self._compute_overlapping_partitions()
 
     def _compute_partitions(self):
         """Sets `P`, a matrix that indicates the partition of the domain's
@@ -72,6 +72,25 @@ class BaseTwoLevelASPreconditioner(object):
 
         return csc_matrix(
             (P_values, (row_idx, col_idx)), shape=(self.m**2, self.N**2)
+        )
+
+    def _compute_overlapping_partitions(self):
+        row_idx = []
+        col_idx = []
+
+        for i in range(self.N**2):
+            # First, retrieve the nodes in the subdomain.
+            Omega_i = self.P[:, i].nonzero()[0]
+
+            # Compute the overlapping subdomain.
+            Omega_i_extended = self._compute_overlap(Omega_i, self.k)
+
+            row_idx.extend(Omega_i_extended)
+            col_idx.extend(i * np.ones(len(Omega_i_extended), dtype=int))
+
+        return csc_matrix(
+            (np.ones(len(row_idx)), (row_idx, col_idx)),
+            shape=(self.m**2, self.N**2),
         )
 
     def _compute_overlap(self, Omega_i, l):
