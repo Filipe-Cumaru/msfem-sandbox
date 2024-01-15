@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 from matplotlib import cm
-from scipy.sparse.linalg import gmres
+from scipy.sparse.linalg import gmres, LinearOperator
 from scipy.sparse import load_npz
 from context import schwarz
 
@@ -35,7 +35,8 @@ def parse_args(example_description):
         "--precond",
         type=str,
         help="The preconditioning method to be used.",
-        choices=["AS", "RAS"],
+        choices=["AS"],
+        default="AS",
     )
     args = parser.parse_args()
     return args
@@ -78,21 +79,16 @@ def run_example(input_dir, N, n, k, precond_type):
     print("------- 1. Initialization")
     if precond_type == "AS":
         precond = schwarz.TwoLevelASPreconditioner(A, Phi, N, n, k)
-    elif precond_type == "RAS":
-        precond = schwarz.TwoLevelRASPreconditioner(A, Phi, N, n, k)
     else:
-        raise ValueError("The preconditioner type must one of AS or RAS.")
+        raise ValueError("The preconditioner type must be AS.")
     print("Done!")
 
-    print("------- 2. Preconditioner assembly")
-    M_as = precond.assemble()
-    print("Done!")
-
-    print("------- 3. Solution without a preconditioner")
+    print("------- 2. Solution without a preconditioner")
     u_ref, _ = gmres(A, b, callback=IterationsCounter())
     print("Done!")
 
-    print("------- 4. Solution with a preconditioner")
+    print("------- 3. Solution with a preconditioner")
+    M_as = LinearOperator((m**2, m**2), lambda x: precond.apply(x))
     u_precond, _ = gmres(A, b, M=M_as, callback=IterationsCounter())
     print("Done!")
 
