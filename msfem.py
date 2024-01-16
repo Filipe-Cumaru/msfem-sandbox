@@ -1,5 +1,6 @@
-from scipy.sparse import lil_matrix
+from scipy.sparse import lil_matrix, csc_matrix
 from scipy.integrate import quad
+import numpy as np
 
 
 class MSBasisFunction(object):
@@ -39,31 +40,43 @@ class Q1BasisFunction(MSBasisFunction):
         super().__init__(N, n)
 
     def assemble_operator(self):
-        Phi = lil_matrix((self.N**2, self.m**2))
+        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
+        xs, ys = xs.flatten(), ys.flatten()
+
+        Phi_row_idx = []
+        Phi_col_idx = []
+        Phi_values = []
+
         for P in range(self.N**2):
             Ni, Nj = P % self.N, P // self.N
             xP, yP = Ni * self.H, Nj * self.H
-            for p in range(self.m**2):
-                ni, nj = p % self.m, p // self.m
-                xp, yp = ni * self.h, nj * self.h
-                if p not in self.boundary_fine_nodes:
-                    if xp == xP and yp == yP:
-                        Phi[P, p] = 1
-                    elif abs(xp - xP) < self.H and abs(yp - yP) < self.H:
-                        Phi[P, p] = self._compute_basis_function(xp, yp, xP, yP)
-        Phi = Phi.tocsc()
+
+            # Filter the fine nodes in the neighborhood of P.
+            loc_mask = (np.abs(xs - xP) < self.H) & (np.abs(ys - yP) < self.H)
+            xs_loc = xs[loc_mask]
+            ys_loc = ys[loc_mask]
+
+            # Get the indices of the internal nodes.
+            xs_idx = (xs_loc / self.h).astype(int)
+            ys_idx = (ys_loc / self.h).astype(int)
+            global_idx = xs_idx + ys_idx * self.m
+            in_mask = ~np.isin(global_idx, self.boundary_fine_nodes, assume_unique=True)
+            xs_in, ys_in = xs_loc[in_mask], ys_loc[in_mask]
+
+            # Compute the values of the basis function for the internal nodes.
+            Phi_P = np.abs(
+                (self.H - np.abs(xs_in - xP)) * (self.H - np.abs(ys_in - yP))
+            ) / (self.H**2)
+
+            Phi_row_idx.extend(len(Phi_P) * [P])
+            Phi_col_idx.extend(global_idx[in_mask])
+            Phi_values.extend(Phi_P)
+
+        Phi = csc_matrix(
+            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
+        )
+
         return Phi
-
-    def _compute_basis_function(self, x, y, X, Y):
-        # The limits of the denominator integral.
-        xL = X - self.H if x < X else X + self.H
-        yL = Y - self.H if y < Y else Y + self.H
-
-        # The limits of the numerator integral.
-        x_start, x_end = xL, x
-        y_start, y_end = yL, y
-
-        return abs((x_end - x_start) * (y_end - y_start)) / (self.H**2)
 
 
 class MsFEMBasisFunction(object):
