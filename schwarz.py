@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse import csc_matrix
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import splu
 
 
 class BaseTwoLevelASPreconditioner(object):
@@ -121,6 +121,8 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
 
     def __init__(self, A, Phi, N, n, k) -> None:
         super().__init__(A, Phi, N, n, k)
+        self.A_i_lu_decompostions = self._compute_local_lu_decompositions()
+        self.A_0_lu = splu(self.Phi @ (self.A @ self.Phi.transpose()))
 
     def apply(self, x):
         """Applies the two-level AS preconditioner to the current iterate
@@ -137,15 +139,23 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
         # First level.
         for i in range(self.N**2):
             Omega_i_extended = self.P_extended[:, i].nonzero()[0]
-            A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
+            A_i_lu = self.A_i_lu_decompostions[i]
             x_i = x[Omega_i_extended]
-            y_i = spsolve(A_i, x_i)
+            y_i = A_i_lu.solve(x_i)
             y[Omega_i_extended] += y_i
 
         # Second level.
-        A_0 = self.Phi @ (self.A @ self.Phi.transpose())
         x_0 = self.Phi @ x
-        y_0 = spsolve(A_0, x_0)
+        y_0 = self.A_0_lu.solve(x_0)
         y += self.Phi.transpose() @ y_0
 
         return y
+
+    def _compute_local_lu_decompositions(self):
+        A_lu_decompositions = []
+        for i in range(self.N**2):
+            Omega_i_extended = self.P_extended[:, i].nonzero()[0]
+            A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
+            A_i_lu = splu(A_i)
+            A_lu_decompositions.append(A_i_lu)
+        return A_lu_decompositions
