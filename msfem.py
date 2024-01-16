@@ -2,6 +2,40 @@ from scipy.sparse import lil_matrix
 from scipy.integrate import quad
 
 
+class MSBasisFunction(object):
+    def __init__(self, N, n, c=None):
+        """Constructor method.
+
+        Args:
+            N (int): Number of coarse nodes on each direction.
+            n (int): Number of nodes on each direction within each subdomain.
+            c (function): A function that computes the coefficient of the Laplace
+            equation.
+        """
+        if n < 3:
+            raise ValueError("n must be greater than 3")
+
+        self.N = N
+        self.n = n
+        self.m = (self.N - 1) * (self.n - 1) + 1
+        self.c = c
+        self.H = 1 / (self.N - 1)
+        self.h = 1 / (self.m - 1)
+        self.boundary_fine_nodes = [
+            i
+            for i in range(self.m**2)
+            if i % self.m in (0, self.m - 1) or i < self.m or i >= self.m * (self.m - 1)
+        ]
+        self.coarse_edges = [
+            (v, v + 1) for v in range(self.N**2) if v % self.N != self.N - 1
+        ] + [(v, v + self.N) for v in range(self.N**2) if v // self.N < self.N - 1]
+
+    def assemble_operator(self):
+        raise NotImplementedError()
+
+
+
+
 class MsFEMBasisFunction(object):
     """An implementation of the Multiscale Finite Element Method (MsFEM)
     basis functions applied to the linear second order Laplace equation
