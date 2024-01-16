@@ -1,5 +1,5 @@
 import numpy as np
-from utils import run_example
+from utils import run_example, parse_args
 
 
 def c(x, y):
@@ -9,12 +9,16 @@ def c(x, y):
     return ((2 + 1.8 * sx) / (2 + 1.8 * cy)) + ((2 + sy) / (2 + 1.8 * sx))
 
 
-def main():
-    N = 5
-    m = 257
+def main(args):
     input_dir = "hetmaniuk-5-8"
-    run_example(input_dir, N, m, c)
+    N = args.N + 1
+    n = args.n + 1
+    coarse_space = args.coarse_space
+    run_example(input_dir, N, n, c, coarse_space)
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args(
+        "Runs an example based on the problem proposed in eq. 5.8 from Hetmaniuk and Lehoucq (2010)."
+    )
+    main(args)

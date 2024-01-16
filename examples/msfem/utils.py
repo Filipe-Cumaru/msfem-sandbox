@@ -1,9 +1,36 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 from matplotlib import cm
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import load_npz
 from context import msfem
+
+
+def parse_args(example_description):
+    parser = argparse.ArgumentParser(description=example_description)
+    parser.add_argument(
+        "-N",
+        type=int,
+        help="The number of coarse cells on each direction.",
+        required=True,
+    )
+    parser.add_argument(
+        "-n",
+        type=int,
+        help="The number of fine cells on each direction within each coarse cell.",
+        required=True,
+    )
+    parser.add_argument(
+        "--coarse-space",
+        type=str,
+        help="The coarse space used to compute the basis functions.",
+        choices=["msfem", "q1"],
+        default="msfem",
+        required=True,
+    )
+    args = parser.parse_args()
+    return args
 
 
 def sort_ext_indices(p, xs, ys):
@@ -18,19 +45,26 @@ def compute_l2_rel_error(u, u_ref):
     return (np.sum((u - u_ref) ** 2) / np.sum(u_ref**2)) ** 0.5
 
 
-def run_example(input_dir, N, m, c):
+def run_example(input_dir, N, n, c, coarse_space):
     """Runs one of the examples in the `examples` directory.
 
     Args:
         input_dir (string): The name of the directory containing the input files.
             Must be a subdirectory of `data`.
-        N (int): The number of coarse nodes on each direction.
-        m (int): The number of fine nodes on each direction.
+        N (int): The number of coarse cells on each direction.
+        n (int): The number of fine cells on each direction within a coarse cell.
         c (function): A function that computes the scalar coefficient of the
             elliptic problem.
+        coarse_space (string): The coarse space used to compute the basis functions.
     """
-    n = int((m - 1) / (N - 1) + 1)
-    msfem_bf = msfem.MsFEMBasisFunction(N, n, c)
+    m = (N - 1) * (n - 1) + 1
+
+    if coarse_space == "msfem":
+        msfem_bf = msfem.MsFEMBasisFunction(N, n, c)
+    elif coarse_space == "q1":
+        msfem_bf = msfem.Q1BasisFunction(N, n)
+    else:
+        raise ValueError('The coarse space must be one of "msfem" or "q1".')
 
     print("--------# 1. Computing the basis functions.")
     Phi = msfem_bf.assemble_operator()
@@ -46,8 +80,10 @@ def run_example(input_dir, N, m, c):
     A = A[:, idx]
     A = A[idx, :]
 
+    print("--------# 2. Solving the fine-scale system.")
     u_ref = spsolve(A, b)
 
+    print("--------# 3. Solving the multiscale system.")
     A_c = Phi @ (A @ Phi.transpose())
     b_c = Phi @ b
     x_c = spsolve(A_c, b_c)
