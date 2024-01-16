@@ -34,6 +34,36 @@ class MSBasisFunction(object):
         raise NotImplementedError()
 
 
+class Q1BasisFunction(MSBasisFunction):
+    def __init__(self, N, n):
+        super().__init__(N, n)
+
+    def assemble_operator(self):
+        Phi = lil_matrix((self.N**2, self.m**2))
+        for P in range(self.N**2):
+            Ni, Nj = P % self.N, P // self.N
+            xP, yP = Ni * self.H, Nj * self.H
+            for p in range(self.m**2):
+                ni, nj = p % self.m, p // self.m
+                xp, yp = ni * self.h, nj * self.h
+                if p not in self.boundary_fine_nodes:
+                    if xp == xP and yp == yP:
+                        Phi[P, p] = 1
+                    elif abs(xp - xP) < self.H and abs(yp - yP) < self.H:
+                        Phi[P, p] = self._compute_basis_function(xp, yp, xP, yP)
+        Phi = Phi.tocsc()
+        return Phi
+
+    def _compute_basis_function(self, x, y, X, Y):
+        # The limits of the denominator integral.
+        xL = X - self.H if x < X else X + self.H
+        yL = Y - self.H if y < Y else Y + self.H
+
+        # The limits of the numerator integral.
+        x_start, x_end = xL, x
+        y_start, y_end = yL, y
+
+        return abs((x_end - x_start) * (y_end - y_start)) / (self.H**2)
 
 
 class MsFEMBasisFunction(object):
