@@ -96,7 +96,12 @@ class RGDSWConstantCoarseSpace(MSBasisFunction):
             Ni, Nj = nc % self.N, nc // self.N
             x_nc, y_nc = Ni * self.H, Nj * self.H
 
-            # Filter the fine nodes in the neighborhood of P.
+            # Retrieve the subdomains that contain the coarse node nc.
+            Ni_fine, Nj_fine = Ni * (self.n - 1), Nj * (self.n - 1)
+            nc_fine_idx = Ni_fine + Nj_fine * self.m
+            C_N = self.P[nc_fine_idx, :].nonzero()[1]
+
+            # Filter the fine nodes in the neighborhood of nc.
             loc_mask = (np.abs(xs - x_nc) <= self.H) & (np.abs(ys - y_nc) <= self.H)
             xs_loc = xs[loc_mask]
             ys_loc = ys[loc_mask]
@@ -108,7 +113,7 @@ class RGDSWConstantCoarseSpace(MSBasisFunction):
             in_nodes = np.setdiff1d(global_idx, self.boundary_fine_nodes)  # type: ignore
 
             # Compute the values of the basis function for the internal nodes.
-            Phi_nc = 1 / self.P[in_nodes, :].sum(axis=1).A.flatten()
+            Phi_nc = 1 / (5 - self.P[in_nodes, C_N[:, None]].sum(axis=0).A.flatten())
 
             Phi_row_idx.extend(len(Phi_nc) * [nc])
             Phi_col_idx.extend(in_nodes)
