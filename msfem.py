@@ -79,6 +79,82 @@ class Q1BasisFunction(MSBasisFunction):
         return Phi
 
 
+class RGDSWConstantCoarseSpace(MSBasisFunction):
+    def __init__(self, N, n):
+        super().__init__(N, n)
+        self.P = self._compute_partitions()
+
+    def assemble_operator(self):
+        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
+        xs, ys = xs.flatten(), ys.flatten()
+
+        Phi_row_idx = []
+        Phi_col_idx = []
+        Phi_values = []
+
+        for nc in range(self.N**2):
+            Ni, Nj = nc % self.N, nc // self.N
+            x_nc, y_nc = Ni * self.H, Nj * self.H
+
+            # Filter the fine nodes in the neighborhood of P.
+            loc_mask = (np.abs(xs - x_nc) <= self.H) & (np.abs(ys - y_nc) <= self.H)
+            xs_loc = xs[loc_mask]
+            ys_loc = ys[loc_mask]
+
+            # Get the indices of the internal nodes.
+            xs_idx = (xs_loc / self.h).astype(int)
+            ys_idx = (ys_loc / self.h).astype(int)
+            global_idx = xs_idx + ys_idx * self.m
+            in_nodes = np.setdiff1d(global_idx, self.boundary_fine_nodes)  # type: ignore
+
+            # Compute the values of the basis function for the internal nodes.
+            Phi_nc = 1 / self.P[in_nodes, :].sum(axis=1).A.flatten()
+
+            Phi_row_idx.extend(len(Phi_nc) * [nc])
+            Phi_col_idx.extend(in_nodes)
+            Phi_values.extend(Phi_nc)
+
+        Phi = csc_matrix(
+            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
+        )
+
+        return Phi
+
+    def _compute_partitions(self):
+        """Sets `P`, a matrix that indicates the partition of the domain's
+        nodes into the non-overlapping subdomains.
+        """
+        # Since each subdomain is a square, the partition is computed by
+        # moving a "window" across the domain and assigning the nodes within
+        # the window to the subdomain.
+        ref_idx = np.arange(self.n, dtype=int)
+        ref_window = np.concatenate([ref_idx + j * self.m for j in range(self.n)])
+
+        row_idx = []
+        col_idx = []
+        P_values = []
+
+        N_cells = self.N - 1
+        n_cells = self.n - 1
+        for i in range(N_cells**2):
+            # Horizontal and vertical displacement of the reference window.
+            displ_horiz, displ_vert = i % N_cells, i // N_cells
+
+            # The nodes in the subdomain \Omega_i.
+            Omega_i = (
+                ref_window + (displ_horiz * n_cells) + (displ_vert * n_cells * self.m)
+            )
+
+            row_idx.extend(Omega_i)
+            col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
+            P_values.extend(np.ones(len(Omega_i)))
+
+        return csc_matrix(
+            (P_values, (row_idx, col_idx)), shape=(self.m**2, N_cells**2)
+        )
+
+
+
 class MsFEMBasisFunction(object):
     """An implementation of the Multiscale Finite Element Method (MsFEM)
     basis functions applied to the linear second order Laplace equation
