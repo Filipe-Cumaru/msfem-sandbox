@@ -148,6 +148,9 @@ class RGDSWCoarseSpace(MSBasisFunction):
             )
             Phi[Omega_i_coarse_nodes, Omega_i_interior[:, None]] -= Phi_i_IB_inc
 
+        # Restrict the prolongation operator to the coarse nodes.
+        Phi = Phi[self.coarse_nodes, :]
+
         return Phi
 
     def _compute_interface_basis_function(self):
