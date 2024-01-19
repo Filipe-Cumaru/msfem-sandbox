@@ -1,5 +1,6 @@
 from scipy.sparse import lil_matrix, csc_matrix
 from scipy.integrate import quad
+from scipy.sparse.linalg import spsolve
 import numpy as np
 
 
@@ -79,58 +80,56 @@ class Q1BasisFunction(MSBasisFunction):
         return Phi
 
 
-class RGDSWConstantCoarseSpace(MSBasisFunction):
-    def __init__(self, N, n):
+class RGDSWCoarseSpace(MSBasisFunction):
+    def __init__(self, N, n, A):
         super().__init__(N, n)
-        self.P = self._compute_partitions()
+        self.A = A
+        self.P, self.P_I, self.P_B = self._compute_partitions()
+        self.coarse_nodes = np.array(
+            [
+                i
+                for i in range(self.N**2)
+                if i % self.N not in (0, self.N - 1)
+                and i >= self.N
+                and i < self.N * (self.N - 1)
+            ]
+        )
 
     def assemble_operator(self):
-        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
-        xs, ys = xs.flatten(), ys.flatten()
+        Phi_interface = self._compute_interface_basis_function()
+        Phi = csc_matrix(Phi_interface)
 
-        Phi_row_idx = []
-        Phi_col_idx = []
-        Phi_values = []
-
-        for nc in range(self.N**2):
-            Ni, Nj = nc % self.N, nc // self.N
-            x_nc, y_nc = Ni * self.H, Nj * self.H
-
-            # Retrieve the subdomains that contain the coarse node nc.
-            Ni_fine, Nj_fine = Ni * (self.n - 1), Nj * (self.n - 1)
-            nc_fine_idx = Ni_fine + Nj_fine * self.m
-            supp_subdom = self.P[nc_fine_idx, :].nonzero()[1]
-
-            # Filter the fine nodes in the neighborhood of nc.
-            loc_mask = (np.abs(xs - x_nc) <= self.H) & (np.abs(ys - y_nc) <= self.H)
-            xs_loc = xs[loc_mask]
-            ys_loc = ys[loc_mask]
-
-            # Get the indices of the internal nodes.
-            xs_idx = (xs_loc / self.h).astype(int)
-            ys_idx = (ys_loc / self.h).astype(int)
-            global_idx = xs_idx + ys_idx * self.m
-            in_nodes = np.setdiff1d(global_idx, self.boundary_fine_nodes)  # type: ignore
-
-            # Compute the values of the basis function for the internal nodes.
-            Phi_nc = 1 / (
-                5 - self.P[in_nodes, supp_subdom[:, None]].sum(axis=0).A.flatten()
+        for i in range((self.N - 1) ** 2):
+            Omega_i = self.P[:, i].nonzero()[0]
+            Omega_i_boundary = self.P_B[:, i].nonzero()[0]
+            Omega_i_interior = self.P_I[:, i].nonzero()[0]
+            Omega_i_vertices = np.array(
+                [
+                    i % (self.N - 1) + (i // (self.N - 1)) * self.N,
+                    i % (self.N - 1) + (i // (self.N - 1)) * self.N + 1,
+                    i % (self.N - 1) + (i // (self.N - 1)) * self.N + self.N,
+                    i % (self.N - 1) + (i // (self.N - 1)) * self.N + self.N + 1,
+                ]
             )
+            Omega_i_coarse_nodes = np.intersect1d(Omega_i_vertices, self.coarse_nodes)
 
-            Phi_row_idx.extend(len(Phi_nc) * [nc])
-            Phi_col_idx.extend(in_nodes)
-            Phi_values.extend(Phi_nc)
+            Ai_II = self.A[Omega_i_interior, Omega_i_interior[:, None]]
+            Ai_IB = self.A[Omega_i_boundary, Omega_i_interior[:, None]]
 
-        Phi = csc_matrix(
-            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
-        )
+            Psi_i = Phi_interface[Omega_i_coarse_nodes, Omega_i[:, None]]
+            boundary_mask = np.isin(Omega_i, Omega_i_boundary, assume_unique=True)
+            Psi_i_B = Psi_i[boundary_mask, :]
+            Phi_i_IB_inc = spsolve(Ai_II, Ai_IB @ Psi_i_B).reshape(
+                (len(Omega_i_interior), len(Omega_i_coarse_nodes))
+            )
+            Phi[Omega_i_coarse_nodes, Omega_i_interior[:, None]] -= Phi_i_IB_inc
 
         return Phi
 
+    def _compute_interface_basis_function(self):
+        raise NotImplementedError()
+
     def _compute_partitions(self):
-        """Sets `P`, a matrix that indicates the partition of the domain's
-        nodes into the non-overlapping subdomains.
-        """
         # Since each subdomain is a square, the partition is computed by
         # moving a "window" across the domain and assigning the nodes within
         # the window to the subdomain.
@@ -139,7 +138,7 @@ class RGDSWConstantCoarseSpace(MSBasisFunction):
 
         row_idx = []
         col_idx = []
-        P_values = []
+        R_values = []
 
         N_cells = self.N - 1
         n_cells = self.n - 1
@@ -154,12 +153,63 @@ class RGDSWConstantCoarseSpace(MSBasisFunction):
 
             row_idx.extend(Omega_i)
             col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
-            P_values.extend(np.ones(len(Omega_i)))
+            R_values.extend(np.ones(len(Omega_i)))
 
-        return csc_matrix(
-            (P_values, (row_idx, col_idx)), shape=(self.m**2, N_cells**2)
+        P = csc_matrix(
+            (R_values, (row_idx, col_idx)), shape=(self.m**2, N_cells**2)
+        )
+        P_I = P.multiply(P.sum(axis=1) == 1).tocsc()
+        P_B = P - P_I
+
+        return P, P_I, P_B
+
+
+class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
+    def __init__(self, N, n, A):
+        super().__init__(N, n, A)
+
+    def _compute_interface_basis_function(self):
+        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
+        xs, ys = xs.flatten(), ys.flatten()
+
+        Phi_row_idx = []
+        Phi_col_idx = []
+        Phi_values = []
+
+        for nc in self.coarse_nodes:
+            Ni, Nj = nc % self.N, nc // self.N
+            x_nc, y_nc = Ni * self.H, Nj * self.H
+
+            # Retrieve the subdomains that contain the coarse node nc.
+            Ni_fine, Nj_fine = Ni * (self.n - 1), Nj * (self.n - 1)
+            nc_fine_idx = Ni_fine + Nj_fine * self.m
+
+            # Filter the fine nodes in the neighborhood of nc.
+            supp_mask = (np.abs(xs - x_nc) <= self.H) & (np.abs(ys - y_nc) <= self.H)
+            xs_supp = xs[supp_mask]
+            ys_supp = ys[supp_mask]
+            xs_interface = xs_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
+            ys_interface = ys_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
+
+            # Get the indices of the internal nodes.
+            xs_idx = (xs_interface / self.h).astype(int)
+            ys_idx = (ys_interface / self.h).astype(int)
+            global_idx = xs_idx + ys_idx * self.m
+            in_nodes = np.setdiff1d(global_idx, self.boundary_fine_nodes)  # type: ignore
+
+            # Compute the values of the basis function for the internal nodes.
+            Phi_nc = 0.5 * np.ones(len(in_nodes))
+            Phi_nc[in_nodes == nc_fine_idx] = 1
+
+            Phi_row_idx.extend(len(Phi_nc) * [nc])
+            Phi_col_idx.extend(in_nodes)
+            Phi_values.extend(Phi_nc)
+
+        Phi = csc_matrix(
+            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
         )
 
+        return Phi
 
 
 class MsFEMBasisFunction(object):
