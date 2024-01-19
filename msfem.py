@@ -122,13 +122,15 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
             # The vertices that are actually coarse nodes according to the
             # definition in Dohrmann and Windlund (2017).
-            Omega_i_coarse_nodes = np.intersect1d(Omega_i_coarse_vertices, self.coarse_nodes)
+            Omega_i_coarse_nodes = np.intersect1d(
+                Omega_i_coarse_vertices, self.coarse_nodes
+            )
 
             # The portion of the system matrix corresponding to the interior nodes
             # of \Omega_i.
             Ai_II = self.A[Omega_i_interior, Omega_i_interior[:, None]]
 
-            # The portion of the system matrix corresponding to the interaction 
+            # The portion of the system matrix corresponding to the interaction
             # between interior and boundary nodes of \Omega_i.
             Ai_IB = self.A[Omega_i_boundary, Omega_i_interior[:, None]]
 
@@ -197,8 +199,8 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
 
 class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
-    """Implementation of option 1 for the RGDSW coarse space described in Dohrmann and Windlund (2017).
-    """
+    """Implementation of option 1 for the RGDSW coarse space described in Dohrmann and Windlund (2017)."""
+
     def __init__(self, N, n, A):
         super().__init__(N, n, A)
 
