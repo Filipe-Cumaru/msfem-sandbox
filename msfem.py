@@ -100,10 +100,18 @@ class RGDSWCoarseSpace(MSBasisFunction):
         Phi = csc_matrix(Phi_interface)
 
         for i in range((self.N - 1) ** 2):
+            # The set of fine nodes in the subdomain.
             Omega_i = self.P[:, i].nonzero()[0]
+
+            # The set of fine nodes on the subdomain's boundary.
             Omega_i_boundary = self.P_B[:, i].nonzero()[0]
+
+            # The set of interior nodes of the subdomain.
             Omega_i_interior = self.P_I[:, i].nonzero()[0]
-            Omega_i_vertices = np.array(
+
+            # The vertices of the subdomain on the coarse scale, i.e.,
+            # the corners that form the square subdomain.
+            Omega_i_coarse_vertices = np.array(
                 [
                     i % (self.N - 1) + (i // (self.N - 1)) * self.N,
                     i % (self.N - 1) + (i // (self.N - 1)) * self.N + 1,
@@ -111,14 +119,30 @@ class RGDSWCoarseSpace(MSBasisFunction):
                     i % (self.N - 1) + (i // (self.N - 1)) * self.N + self.N + 1,
                 ]
             )
-            Omega_i_coarse_nodes = np.intersect1d(Omega_i_vertices, self.coarse_nodes)
 
+            # The vertices that are actually coarse nodes according to the
+            # definition in Dohrmann and Windlund (2017).
+            Omega_i_coarse_nodes = np.intersect1d(Omega_i_coarse_vertices, self.coarse_nodes)
+
+            # The portion of the system matrix corresponding to the interior nodes
+            # of \Omega_i.
             Ai_II = self.A[Omega_i_interior, Omega_i_interior[:, None]]
+
+            # The portion of the system matrix corresponding to the interaction 
+            # between interior and boundary nodes of \Omega_i.
             Ai_IB = self.A[Omega_i_boundary, Omega_i_interior[:, None]]
 
+            # The contribution of the interface basis function for the subdomain
+            # \Omega_i (c.f. Eq. 3 from Dohrmann and Windlund (2017)).
             Psi_i = Phi_interface[Omega_i_coarse_nodes, Omega_i[:, None]]
+
+            # From the slice of the interface prolongation operator, we extract
+            # the contribution of the nodes on the boundary of \Omega_i.
             boundary_mask = np.isin(Omega_i, Omega_i_boundary, assume_unique=True)
             Psi_i_B = Psi_i[boundary_mask, :]
+
+            # Finally, the increment for the coarse nodes in \Omega_i is computed
+            # as described in Dohrmann and Windlund (2017) (c.f. \Phi_{ic} in the paper).
             Phi_i_IB_inc = spsolve(Ai_II, Ai_IB @ Psi_i_B).reshape(
                 (len(Omega_i_interior), len(Omega_i_coarse_nodes))
             )
@@ -155,16 +179,23 @@ class RGDSWCoarseSpace(MSBasisFunction):
             col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
             R_values.extend(np.ones(len(Omega_i)))
 
+        # The partition of the nodes into each subdomain.
         P = csc_matrix(
             (R_values, (row_idx, col_idx)), shape=(self.m**2, N_cells**2)
         )
+
+        # The partition of the interior nodes for each subdomain.
         P_I = P.multiply(P.sum(axis=1) == 1).tocsc()
+
+        # The partition of the nodes on the boundary for each subdomain.
         P_B = P - P_I
 
         return P, P_I, P_B
 
 
 class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
+    """Implementation of option 1 for the RGDSW coarse space described in Dohrmann and Windlund (2017).
+    """
     def __init__(self, N, n, A):
         super().__init__(N, n, A)
 
