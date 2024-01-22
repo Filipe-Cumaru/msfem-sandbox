@@ -212,6 +212,10 @@ class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
         Phi_col_idx = []
         Phi_values = []
 
+        coarse_nodes_global_idx = (self.coarse_nodes % self.N) * (self.n - 1) + (
+            self.coarse_nodes // self.N
+        ) * (self.n - 1) * self.m
+
         for nc in self.coarse_nodes:
             Ni, Nj = nc % self.N, nc // self.N
             x_nc, y_nc = Ni * self.H, Nj * self.H
@@ -232,6 +236,9 @@ class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
             ys_idx = (ys_interface / self.h).astype(int)
             global_idx = xs_idx + ys_idx * self.m
             in_nodes = np.setdiff1d(global_idx, self.boundary_fine_nodes)  # type: ignore
+            in_nodes = np.setdiff1d(
+                global_idx, coarse_nodes_global_idx[self.coarse_nodes != nc]
+            )
 
             # Compute the values of the basis function for the internal nodes.
             Phi_nc = 0.5 * np.ones(len(in_nodes))
