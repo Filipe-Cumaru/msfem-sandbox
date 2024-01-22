@@ -248,6 +248,91 @@ class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
         return Phi
 
 
+class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
+    def __init__(self, N, n, A):
+        super().__init__(N, n, A)
+        self.coarse_nodes_global_idx = (self.coarse_nodes % self.N) * (self.n - 1) + (
+            self.coarse_nodes // self.N
+        ) * (self.n - 1) * self.m
+        self.D = self._assemble_distance_matrix()
+
+    def _compute_interface_basis_function(self):
+        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
+        xs, ys = xs.flatten(), ys.flatten()
+
+        Phi_row_idx = []
+        Phi_col_idx = []
+        Phi_values = []
+
+        for nc in self.coarse_nodes:
+            inv_dist_to_nc = self.D[:, nc].A.flatten()
+            supp_nodes = np.where(inv_dist_to_nc != 0)[0]
+            inv_dist_sum = self.D[supp_nodes, :].sum(axis=1).A.flatten()
+            Phi_values.extend(inv_dist_to_nc[supp_nodes] / inv_dist_sum)
+            Phi_row_idx.extend(len(inv_dist_sum) * [nc])
+            Phi_col_idx.extend(supp_nodes)
+
+        Phi_values.extend(np.ones(len(self.coarse_nodes)))
+        Phi_row_idx.extend(self.coarse_nodes)
+        Phi_col_idx.extend(self.coarse_nodes_global_idx)
+
+        Phi = csc_matrix(
+            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
+        )
+
+        return Phi
+
+    def _assemble_distance_matrix(self):
+        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
+        xs, ys = xs.flatten(), ys.flatten()
+
+        interface_nodes = np.array(
+            [
+                ni
+                for ni in range(self.m**2)
+                if ((ni % self.m) % (self.n - 1)) == 0
+                or ((ni // self.m) % (self.n - 1)) == 0
+            ]
+        )
+        gamma = np.setdiff1d(interface_nodes, self.boundary_fine_nodes)  # type: ignore
+        gamma = np.setdiff1d(gamma, self.coarse_nodes_global_idx)
+
+        D_row_idx = []
+        D_col_idx = []
+        D_values = []
+
+        for nc in self.coarse_nodes:
+            Ni, Nj = nc % self.N, nc // self.N
+            x_nc, y_nc = Ni * self.H, Nj * self.H
+
+            # Filter the fine nodes in the neighborhood of nc.
+            supp_mask = (np.abs(xs - x_nc) <= self.H) & (np.abs(ys - y_nc) <= self.H)
+            xs_supp = xs[supp_mask]
+            ys_supp = ys[supp_mask]
+            xs_interface = xs_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
+            ys_interface = ys_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
+
+            # Get the indices of the internal nodes.
+            xs_idx = (xs_interface / self.h).astype(int)
+            ys_idx = (ys_interface / self.h).astype(int)
+            global_idx = xs_idx + ys_idx * self.m
+            int_nodes = np.intersect1d(global_idx, gamma)
+
+            distances = (
+                np.sqrt((xs[int_nodes] - x_nc) ** 2 + (ys[int_nodes] - y_nc) ** 2) ** -1
+            )
+
+            D_values.extend(distances)
+            D_row_idx.extend(int_nodes)
+            D_col_idx.extend(len(distances) * [nc])
+
+        D = csc_matrix(
+            (D_values, (D_row_idx, D_col_idx)), shape=(self.m**2, self.N**2)
+        )
+
+        return D
+
+
 class MsFEMBasisFunction(object):
     """An implementation of the Multiscale Finite Element Method (MsFEM)
     basis functions applied to the linear second order Laplace equation
