@@ -94,6 +94,14 @@ class RGDSWCoarseSpace(MSBasisFunction):
                 and i < self.N * (self.N - 1)
             ]
         )
+        self.coarse_nodes_global_idx = (self.coarse_nodes % self.N) * (self.n - 1) + (
+            self.coarse_nodes // self.N
+        ) * (self.n - 1) * self.m
+        self.xs, self.ys = np.meshgrid(
+            np.linspace(0, 1, self.m), np.linspace(0, 1, self.m)
+        )
+        self.xs, self.ys = self.xs.flatten(), self.ys.flatten()
+        self.D = self._assemble_inverse_distance_matrix()
 
     def assemble_operator(self):
         Phi_interface = self._compute_interface_basis_function()
@@ -156,6 +164,76 @@ class RGDSWCoarseSpace(MSBasisFunction):
         return Phi
 
     def _compute_interface_basis_function(self):
+        Phi_row_idx = []
+        Phi_col_idx = []
+        Phi_values = []
+
+        for nc in self.coarse_nodes:
+            inv_dist_to_nc = self.D[:, nc].A.flatten()
+            supp_nodes = np.where(inv_dist_to_nc != 0)[0]
+            inv_dist_sum = self.D[supp_nodes, :].sum(axis=1).A.flatten()
+            Phi_values.extend(inv_dist_to_nc[supp_nodes] / inv_dist_sum)
+            Phi_row_idx.extend(len(inv_dist_sum) * [nc])
+            Phi_col_idx.extend(supp_nodes)
+
+        Phi_values.extend(np.ones(len(self.coarse_nodes)))
+        Phi_row_idx.extend(self.coarse_nodes)
+        Phi_col_idx.extend(self.coarse_nodes_global_idx)
+
+        Phi = csc_matrix(
+            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
+        )
+
+        return Phi
+
+    def _assemble_inverse_distance_matrix(self):
+        interface_nodes = np.array(
+            [
+                ni
+                for ni in range(self.m**2)
+                if ((ni % self.m) % (self.n - 1)) == 0
+                or ((ni // self.m) % (self.n - 1)) == 0
+            ]
+        )
+        gamma = np.setdiff1d(interface_nodes, self.boundary_fine_nodes)  # type: ignore
+        gamma = np.setdiff1d(gamma, self.coarse_nodes_global_idx)
+
+        D_row_idx = []
+        D_col_idx = []
+        D_values = []
+
+        for nc in self.coarse_nodes:
+            Ni, Nj = nc % self.N, nc // self.N
+            x_nc, y_nc = Ni * self.H, Nj * self.H
+
+            # Filter the fine nodes in the neighborhood of nc.
+            supp_mask = (np.abs(self.xs - x_nc) <= self.H) & (
+                np.abs(self.ys - y_nc) <= self.H
+            )
+            xs_supp = self.xs[supp_mask]
+            ys_supp = self.ys[supp_mask]
+            xs_interface = xs_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
+            ys_interface = ys_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
+
+            # Get the indices of the internal nodes.
+            xs_idx = (xs_interface / self.h).astype(int)
+            ys_idx = (ys_interface / self.h).astype(int)
+            global_idx = xs_idx + ys_idx * self.m
+            int_nodes = np.intersect1d(global_idx, gamma)
+
+            inv_dist = self._compute_inv_distances(int_nodes, x_nc, y_nc)
+
+            D_values.extend(inv_dist)
+            D_row_idx.extend(int_nodes)
+            D_col_idx.extend(len(inv_dist) * [nc])
+
+        D = csc_matrix(
+            (D_values, (D_row_idx, D_col_idx)), shape=(self.m**2, self.N**2)
+        )
+
+        return D
+
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
         raise NotImplementedError()
 
     def _compute_partitions(self):
@@ -199,145 +277,33 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
 
 class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
-    """Implementation of option 1 for the RGDSW coarse space described in Dohrmann and Windlund (2017)."""
+    """A RGDSW coarse space as proposed by Dohrmann and Windlund (2017) in
+    Eq. 1 (option 1).
+    """
 
     def __init__(self, N, n, A):
         super().__init__(N, n, A)
 
-    def _compute_interface_basis_function(self):
-        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
-        xs, ys = xs.flatten(), ys.flatten()
-
-        Phi_row_idx = []
-        Phi_col_idx = []
-        Phi_values = []
-
-        coarse_nodes_global_idx = (self.coarse_nodes % self.N) * (self.n - 1) + (
-            self.coarse_nodes // self.N
-        ) * (self.n - 1) * self.m
-
-        for nc in self.coarse_nodes:
-            Ni, Nj = nc % self.N, nc // self.N
-            x_nc, y_nc = Ni * self.H, Nj * self.H
-
-            # Retrieve the subdomains that contain the coarse node nc.
-            Ni_fine, Nj_fine = Ni * (self.n - 1), Nj * (self.n - 1)
-            nc_fine_idx = Ni_fine + Nj_fine * self.m
-
-            # Filter the fine nodes in the neighborhood of nc.
-            supp_mask = (np.abs(xs - x_nc) <= self.H) & (np.abs(ys - y_nc) <= self.H)
-            xs_supp = xs[supp_mask]
-            ys_supp = ys[supp_mask]
-            xs_interface = xs_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
-            ys_interface = ys_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
-
-            # Get the indices of the internal nodes.
-            xs_idx = (xs_interface / self.h).astype(int)
-            ys_idx = (ys_interface / self.h).astype(int)
-            global_idx = xs_idx + ys_idx * self.m
-            in_nodes = np.setdiff1d(global_idx, self.boundary_fine_nodes)  # type: ignore
-            in_nodes = np.setdiff1d(
-                global_idx, coarse_nodes_global_idx[self.coarse_nodes != nc]
-            )
-
-            # Compute the values of the basis function for the internal nodes.
-            Phi_nc = 0.5 * np.ones(len(in_nodes))
-            Phi_nc[in_nodes == nc_fine_idx] = 1
-
-            Phi_row_idx.extend(len(Phi_nc) * [nc])
-            Phi_col_idx.extend(in_nodes)
-            Phi_values.extend(Phi_nc)
-
-        Phi = csc_matrix(
-            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
-        )
-
-        return Phi
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+        return np.ones(len(fine_nodes))
 
 
 class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
+    """A RGDSW coarse space as proposed by Dohrmann and Windlund (2017) in
+    Eq. 5 (option 2.2).
+    """
+
     def __init__(self, N, n, A):
         super().__init__(N, n, A)
-        self.coarse_nodes_global_idx = (self.coarse_nodes % self.N) * (self.n - 1) + (
-            self.coarse_nodes // self.N
-        ) * (self.n - 1) * self.m
-        self.D = self._assemble_distance_matrix()
 
-    def _compute_interface_basis_function(self):
-        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
-        xs, ys = xs.flatten(), ys.flatten()
-
-        Phi_row_idx = []
-        Phi_col_idx = []
-        Phi_values = []
-
-        for nc in self.coarse_nodes:
-            inv_dist_to_nc = self.D[:, nc].A.flatten()
-            supp_nodes = np.where(inv_dist_to_nc != 0)[0]
-            inv_dist_sum = self.D[supp_nodes, :].sum(axis=1).A.flatten()
-            Phi_values.extend(inv_dist_to_nc[supp_nodes] / inv_dist_sum)
-            Phi_row_idx.extend(len(inv_dist_sum) * [nc])
-            Phi_col_idx.extend(supp_nodes)
-
-        Phi_values.extend(np.ones(len(self.coarse_nodes)))
-        Phi_row_idx.extend(self.coarse_nodes)
-        Phi_col_idx.extend(self.coarse_nodes_global_idx)
-
-        Phi = csc_matrix(
-            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
-        )
-
-        return Phi
-
-    def _assemble_distance_matrix(self):
-        xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
-        xs, ys = xs.flatten(), ys.flatten()
-
-        interface_nodes = np.array(
-            [
-                ni
-                for ni in range(self.m**2)
-                if ((ni % self.m) % (self.n - 1)) == 0
-                or ((ni // self.m) % (self.n - 1)) == 0
-            ]
-        )
-        gamma = np.setdiff1d(interface_nodes, self.boundary_fine_nodes)  # type: ignore
-        gamma = np.setdiff1d(gamma, self.coarse_nodes_global_idx)
-
-        D_row_idx = []
-        D_col_idx = []
-        D_values = []
-
-        for nc in self.coarse_nodes:
-            Ni, Nj = nc % self.N, nc // self.N
-            x_nc, y_nc = Ni * self.H, Nj * self.H
-
-            # Filter the fine nodes in the neighborhood of nc.
-            supp_mask = (np.abs(xs - x_nc) <= self.H) & (np.abs(ys - y_nc) <= self.H)
-            xs_supp = xs[supp_mask]
-            ys_supp = ys[supp_mask]
-            xs_interface = xs_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
-            ys_interface = ys_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
-
-            # Get the indices of the internal nodes.
-            xs_idx = (xs_interface / self.h).astype(int)
-            ys_idx = (ys_interface / self.h).astype(int)
-            global_idx = xs_idx + ys_idx * self.m
-            int_nodes = np.intersect1d(global_idx, gamma)
-
-            distances = (
-                np.sqrt((xs[int_nodes] - x_nc) ** 2 + (ys[int_nodes] - y_nc) ** 2) ** -1
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+        return (
+            np.sqrt(
+                (self.xs[fine_nodes] - x_coarse) ** 2
+                + (self.ys[fine_nodes] - y_coarse) ** 2
             )
-
-            D_values.extend(distances)
-            D_row_idx.extend(int_nodes)
-            D_col_idx.extend(len(distances) * [nc])
-
-        D = csc_matrix(
-            (D_values, (D_row_idx, D_col_idx)), shape=(self.m**2, self.N**2)
+            ** -1
         )
-
-        return D
 
 
 class MsFEMBasisFunction(object):
