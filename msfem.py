@@ -105,7 +105,7 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
     def assemble_operator(self):
         Phi_interface = self._compute_interface_basis_function()
-        Phi = csc_matrix(Phi_interface)
+        Phi = lil_matrix(Phi_interface)
 
         for i in range((self.N - 1) ** 2):
             # The set of fine nodes in the subdomain.
@@ -159,6 +159,7 @@ class RGDSWCoarseSpace(MSBasisFunction):
             Phi[Omega_i_coarse_nodes, Omega_i_interior[:, None]] -= Phi_i_IB_inc
 
         # Restrict the prolongation operator to the coarse nodes.
+        Phi = Phi.tocsc()
         Phi = Phi[self.coarse_nodes, :]
 
         return Phi
