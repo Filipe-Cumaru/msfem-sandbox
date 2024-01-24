@@ -274,7 +274,7 @@ class RGDSWCoarseSpace(MSBasisFunction):
         P_I = P.multiply((P.sum(axis=1) == 1) & global_boundary_mask).tocsc()
 
         # The partition of the nodes on the boundary for each subdomain.
-        P_B = P.multiply(P.sum(axis=1) > 1).tocsc()
+        P_B = P - P_I
 
         return P, P_I, P_B
 
