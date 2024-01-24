@@ -5,7 +5,7 @@ import numpy as np
 
 
 class MSBasisFunction(object):
-    def __init__(self, N, n, c=None):
+    def __init__(self, N, n, c):
         """Constructor method.
 
         Args:
@@ -38,7 +38,7 @@ class MSBasisFunction(object):
 
 class Q1BasisFunction(MSBasisFunction):
     def __init__(self, N, n):
-        super().__init__(N, n)
+        super().__init__(N, n, None)
 
     def assemble_operator(self):
         xs, ys = np.meshgrid(np.linspace(0, 1, self.m), np.linspace(0, 1, self.m))
@@ -81,8 +81,8 @@ class Q1BasisFunction(MSBasisFunction):
 
 
 class RGDSWCoarseSpace(MSBasisFunction):
-    def __init__(self, N, n, A):
-        super().__init__(N, n)
+    def __init__(self, N, n, A, c):
+        super().__init__(N, n, c)
         self.A = A
         self.P, self.P_I, self.P_B = self._compute_partitions()
         self.coarse_nodes = np.array(
@@ -285,7 +285,7 @@ class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
     """
 
     def __init__(self, N, n, A):
-        super().__init__(N, n, A)
+        super().__init__(N, n, A, None)
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
         return np.ones(len(fine_nodes))
@@ -297,7 +297,7 @@ class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
     """
 
     def __init__(self, N, n, A):
-        super().__init__(N, n, A)
+        super().__init__(N, n, A, None)
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
         return (
