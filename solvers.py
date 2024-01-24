@@ -2,9 +2,9 @@ import numpy as np
 from scipy.sparse import diags
 
 
-def cg(A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False):
+def cg(A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False, M=None):
     """A conjugate gradiente (CG) linear solver based on
-    Algorithm 6.18 from Saad (2003).
+    algorithms 6.18 and 9.1 from Saad (2003).
 
     Args:
         A (sparse matrix): The matrix of the linear system.
@@ -22,22 +22,24 @@ def cg(A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False):
     """
     # Initialization of the iterative variables.
     r_curr = b - A @ x0 if x0 is not None else b[:]
+    z_curr = M.matvec(r_curr) if M is not None else r_curr[:]
     p_curr = r_curr[:]
     x_curr = x0 if x0 is not None else np.zeros(len(b))
 
     # An array that stores the values of the CG coefficients.
-    # This will be used to assemble Lanczo's tridiagonla matrix.
+    # This will be used to assemble Lanczo's tridiagonal matrix.
     alpha = np.zeros(maxiter)
     beta = np.zeros(maxiter)
 
     for i in range(maxiter):
-        alpha[i] = np.dot(r_curr, r_curr) / np.dot(A @ p_curr, p_curr)
+        alpha[i] = np.dot(r_curr, z_curr) / np.dot(A @ p_curr, p_curr)
         x_curr += alpha[i] * p_curr
         r_next = r_curr - alpha[i] * A @ p_curr
-        beta[i] = np.dot(r_next, r_next) / np.dot(r_curr, r_curr)
-        p_curr = r_next + beta[i] * p_curr
+        z_next = M.matvec(r_next) if M is not None else r_next[:]
+        beta[i] = np.dot(r_next, z_next) / np.dot(r_curr, z_curr)
+        p_curr = z_next + beta[i] * p_curr
         r_curr = r_next
-
+        z_curr = z_next
         if np.linalg.norm(r_curr) < tol:
             alpha = alpha[: i + 1]
             beta = beta[: i + 1]
