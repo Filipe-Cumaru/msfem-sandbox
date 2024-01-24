@@ -309,6 +309,25 @@ class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
         )
 
 
+class MsFEMCoarseSpace(RGDSWCoarseSpace):
+    def __init__(self, N, n, A, c):
+        super().__init__(N, n, A, c)
+
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+        inv_dist = np.zeros(len(fine_nodes))
+        cx = lambda x: 1 / self.c(x, y_coarse)
+        cy = lambda y: 1 / self.c(x_coarse, y)
+        for i, n in enumerate(fine_nodes):
+            xn, yn = self.xs[n], self.ys[n]
+            if xn == x_coarse:
+                yL = y_coarse - self.H if yn < y_coarse else y_coarse + self.H
+                inv_dist[i] = abs(quad(cy, yn, yL)[0])
+            else:
+                xL = x_coarse - self.H if xn < x_coarse else x_coarse + self.H
+                inv_dist[i] = abs(quad(cx, xn, xL)[0])
+        return inv_dist
+
+
 class MsFEMBasisFunction(object):
     """An implementation of the Multiscale Finite Element Method (MsFEM)
     basis functions applied to the linear second order Laplace equation
