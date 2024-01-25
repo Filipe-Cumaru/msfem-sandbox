@@ -23,7 +23,7 @@ def cg(A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False, M=None):
     # Initialization of the iterative variables.
     r_curr = b - A @ x0 if x0 is not None else b[:]
     z_curr = M.matvec(r_curr) if M is not None else r_curr[:]
-    p_curr = r_curr[:]
+    p_curr = z_curr[:] if M is not None else r_curr[:]
     x_curr = x0 if x0 is not None else np.zeros(len(b))
 
     # An array that stores the values of the CG coefficients.
