@@ -37,6 +37,9 @@ class BaseTwoLevelASPreconditioner(object):
         # A connectivity matrix indicating which nodes are neighbors.
         self.M = (self.A != 0).astype(int)
 
+        # The boundary nodes extracted from the system matrix.
+        self.boundary_nodes = np.where(self.M.sum(axis=1).A.flatten() == 1)[0]
+
         # A partition vector that splits the nodes into each subdmain.
         self.P = self._compute_partitions()
 
@@ -84,6 +87,9 @@ class BaseTwoLevelASPreconditioner(object):
 
             # Compute the overlapping subdomain.
             Omega_i_extended = self._compute_overlap(Omega_i, self.k)
+
+            # Filter the boundary nodes in the subdomain so their value is preserved.
+            Omega_i_extended = np.setdiff1d(Omega_i_extended, self.boundary_nodes)
 
             row_idx.extend(Omega_i_extended)
             col_idx.extend(i * np.ones(len(Omega_i_extended), dtype=int))
