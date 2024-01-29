@@ -2,7 +2,9 @@ import numpy as np
 from scipy.sparse import diags
 
 
-def cg(A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False, M=None):
+def cg(
+    A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False, M=None, callback=None
+):
     """A conjugate gradiente (CG) linear solver based on
     algorithms 6.18 and 9.1 from Saad (2003).
 
@@ -15,6 +17,11 @@ def cg(A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False, M=None):
             If not provided, it is initialized to a vector of zeros. Defaults to None.
         return_lanczos (bool, optional): Compute and return Lanczo's tridiagonal
             matrix, used for a condition number estimate. Defaults to False.
+        M (sparse matrix or SciPy LinearOperator, optional): A preconditioner to applied to
+            the system matrix. The object should approximate the inverse of `A` and
+            implement a matrix-vector product through the method `matvec`.
+        callback (callable, optional): User-supplied function to call after each iteration.
+            It is called as callback(xk), where xk is the current iterate of the solution.
 
     Returns:
         numpy.ndarray: The converged solution. If `return_lanczos` is set to `True`, then
@@ -40,6 +47,10 @@ def cg(A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False, M=None):
         p_curr = z_next + beta[i] * p_curr
         r_curr = r_next
         z_curr = z_next
+
+        if callback is not None:
+            callback(x_curr)
+
         if np.linalg.norm(r_curr) < tol:
             alpha = alpha[: i + 1]
             beta = beta[: i + 1]
