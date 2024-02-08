@@ -213,13 +213,17 @@ class RGDSWCoarseSpace(MSBasisFunction):
             )
             xs_supp = self.xs[supp_mask]
             ys_supp = self.ys[supp_mask]
-            xs_interface = xs_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
-            ys_interface = ys_supp[(xs_supp == x_nc) | (ys_supp == y_nc)]
+            xs_interface = xs_supp[
+                np.isclose(xs_supp, x_nc) | np.isclose(ys_supp, y_nc)
+            ]
+            ys_interface = ys_supp[
+                np.isclose(xs_supp, x_nc) | np.isclose(ys_supp, y_nc)
+            ]
 
             # Get the indices of the internal nodes.
-            xs_idx = (xs_interface / self.h).astype(int)
-            ys_idx = (ys_interface / self.h).astype(int)
-            global_idx = xs_idx + ys_idx * self.m
+            xs_idx = np.round(xs_interface / self.h)
+            ys_idx = np.round(ys_interface / self.h)
+            global_idx = (xs_idx + ys_idx * self.m).astype(int)
             int_nodes = np.intersect1d(global_idx, gamma)
 
             inv_dist = self._compute_inv_distances(int_nodes, x_nc, y_nc)
@@ -228,9 +232,7 @@ class RGDSWCoarseSpace(MSBasisFunction):
             D_row_idx.extend(int_nodes)
             D_col_idx.extend(len(inv_dist) * [nc])
 
-        D = csc_matrix(
-            (D_values, (D_row_idx, D_col_idx)), shape=(self.m**2, self.N**2)
-        )
+        D = csc_matrix((D_values, (D_row_idx, D_col_idx)), shape=(self.m**2, self.N**2))
 
         return D
 
@@ -264,9 +266,7 @@ class RGDSWCoarseSpace(MSBasisFunction):
             R_values.extend(np.ones(len(Omega_i)))
 
         # The partition of the nodes into each subdomain.
-        P = csc_matrix(
-            (R_values, (row_idx, col_idx)), shape=(self.m**2, N_cells**2)
-        )
+        P = csc_matrix((R_values, (row_idx, col_idx)), shape=(self.m**2, N_cells**2))
 
         # The partition of the interior nodes for each subdomain.
         global_boundary_mask = np.ones((self.m**2, 1)).astype(bool)
@@ -319,7 +319,7 @@ class MsFEMCoarseSpace(RGDSWCoarseSpace):
         cy = lambda y: 1 / self.c(x_coarse, y)
         for i, n in enumerate(fine_nodes):
             xn, yn = self.xs[n], self.ys[n]
-            if xn == x_coarse:
+            if np.isclose(xn, x_coarse):
                 yL = y_coarse - self.H if yn < y_coarse else y_coarse + self.H
                 inv_dist[i] = abs(quad(cy, yn, yL)[0])
             else:
@@ -336,7 +336,7 @@ class Q1CoarseSpace(RGDSWCoarseSpace):
         inv_dist = np.zeros(len(fine_nodes))
         for i, n in enumerate(fine_nodes):
             xn, yn = self.xs[n], self.ys[n]
-            if xn == x_coarse:
+            if np.isclose(xn, x_coarse):
                 yL = y_coarse - self.H if yn < y_coarse else y_coarse + self.H
                 inv_dist[i] = abs(yn - yL)
             else:
