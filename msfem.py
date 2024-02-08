@@ -1,4 +1,4 @@
-from scipy.sparse import lil_matrix, csc_matrix
+from scipy.sparse import lil_matrix, csc_matrix, eye, diags, vstack
 from scipy.integrate import quad
 from scipy.sparse.linalg import spsolve
 import numpy as np
@@ -343,6 +343,52 @@ class Q1CoarseSpace(RGDSWCoarseSpace):
                 xL = x_coarse - self.H if xn < x_coarse else x_coarse + self.H
                 inv_dist[i] = abs(xn - xL)
         return inv_dist
+
+
+class AMSCoarseSpace(RGDSWCoarseSpace):
+    def __init__(self, N, n, A):
+        super().__init__(N, n, A, None)
+
+    def assemble_operator(self):
+        interface_nodes = np.array(
+            [
+                ni
+                for ni in range(self.m**2)
+                if ((ni % self.m) % (self.n - 1)) == 0
+                or ((ni // self.m) % (self.n - 1)) == 0
+            ]
+        )
+        gamma = np.setdiff1d(interface_nodes, self.boundary_fine_nodes)  # type: ignore
+        edge_nodes = np.setdiff1d(gamma, self.coarse_nodes_global_idx)
+        interior_nodes = np.setdiff1d(
+            np.arange(self.m**2, dtype=int),
+            np.union1d(edge_nodes, self.coarse_nodes_global_idx),
+        )
+        G = np.hstack(
+            (interior_nodes, edge_nodes, self.coarse_nodes_global_idx)
+        ).argsort()
+
+        I_vv = eye(len(self.coarse_nodes), format="csc")
+
+        A_ii = self.A[interior_nodes[:, None], interior_nodes]
+        A_ie = self.A[interior_nodes[:, None], edge_nodes]
+
+        A_ee = self.A[edge_nodes[:, None], edge_nodes]
+        A_ev = self.A[edge_nodes[:, None], self.coarse_nodes_global_idx]
+        A_ei = self.A[edge_nodes[:, None], interior_nodes]
+        A_ie = self.A[interior_nodes[:, None], edge_nodes]
+        A_ee_mod = A_ee + diags(A_ei.diagonal(), format="csc")
+
+        A_ev_mod = spsolve(A_ee_mod, A_ev)
+        A_ie_mod = spsolve(A_ii, A_ie)
+
+        Phi_wirebasket = vstack((A_ie_mod @ A_ev_mod, -A_ev_mod, I_vv), format="csc").T
+        Phi = Phi_wirebasket[:, G]
+
+        return Phi
+
+    def _assemble_inverse_distance_matrix(self):
+        return None
 
 
 class MsFEMBasisFunction(object):
