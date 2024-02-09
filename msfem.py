@@ -377,7 +377,9 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
 
         cf = None
         if return_cf:
-            b_i, b_e = self.b[self.interior_nodes], self.b[self.edge_nodes]
+            E = self._compute_scaling_matrix()
+            b_scaled = E @ self.b
+            b_i, b_e = b_scaled[self.interior_nodes], b_scaled[self.edge_nodes]
             cf_ee = spsolve(A_ee, b_e)
             cf_i = spsolve(A_ii, b_i - A_ie @ cf_ee)
             cf = np.zeros(len(self.b))
@@ -407,6 +409,15 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
             np.union1d(edge_nodes, vertex_nodes),
         )
         return vertex_nodes, edge_nodes, interior_nodes
+    
+    def _compute_scaling_matrix(self):
+        max_edge_entries = self.A[self.edge_nodes, :].max(axis=1).A.flatten()
+        min_edge_entries = self.A[self.edge_nodes, :].min(axis=1).A.flatten()
+        A_edge_contrast = min_edge_entries / max_edge_entries
+        E_diag = np.ones(self.m ** 2)
+        E_diag[self.edge_nodes] = A_edge_contrast
+        E = diags(E_diag, format="csr")
+        return E
 
 
 class MsFEMBasisFunction(object):
