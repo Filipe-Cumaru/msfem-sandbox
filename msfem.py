@@ -348,8 +348,36 @@ class Q1CoarseSpace(RGDSWCoarseSpace):
 class AMSCoarseSpace(RGDSWCoarseSpace):
     def __init__(self, N, n, A):
         super().__init__(N, n, A, None)
+        self.vertex_nodes, self.edge_nodes, self.interior_nodes = (
+            self._group_nodes_into_ams_classes()
+        )
+        self.G = np.hstack(
+            (self.interior_nodes, self.edge_nodes, self.vertex_nodes)
+        ).argsort()
 
-    def assemble_operator(self):
+    def assemble_operator(self, return_cf=False):
+        I_vv = eye(len(self.coarse_nodes), format="csc")
+
+        A_ii = self.A[self.interior_nodes[:, None], self.interior_nodes]
+        A_ie = self.A[self.interior_nodes[:, None], self.edge_nodes]
+
+        A_ee = self.A[self.edge_nodes[:, None], self.edge_nodes]
+        A_ev = self.A[self.edge_nodes[:, None], self.vertex_nodes]
+        A_ie = self.A[self.interior_nodes[:, None], self.edge_nodes]
+
+        A_ev_mod = spsolve(A_ee, A_ev)
+        A_ie_mod = spsolve(A_ii, A_ie)
+
+        Phi_wirebasket = vstack((A_ie_mod @ A_ev_mod, -A_ev_mod, I_vv), format="csc").T
+        Phi = Phi_wirebasket[:, self.G]
+
+        return Phi
+
+    def _assemble_inverse_distance_matrix(self):
+        return None
+
+    def _group_nodes_into_ams_classes(self):
+        vertex_nodes = self.coarse_nodes_global_idx[:]
         interface_nodes = np.array(
             [
                 ni
@@ -358,37 +386,14 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
                 or ((ni // self.m) % (self.n - 1)) == 0
             ]
         )
-        gamma = np.setdiff1d(interface_nodes, self.boundary_fine_nodes)  # type: ignore
-        edge_nodes = np.setdiff1d(gamma, self.coarse_nodes_global_idx)
+        edge_nodes = np.setdiff1d(
+            np.setdiff1d(interface_nodes, self.boundary_fine_nodes), vertex_nodes
+        )
         interior_nodes = np.setdiff1d(
             np.arange(self.m**2, dtype=int),
-            np.union1d(edge_nodes, self.coarse_nodes_global_idx),
+            np.union1d(edge_nodes, vertex_nodes),
         )
-        G = np.hstack(
-            (interior_nodes, edge_nodes, self.coarse_nodes_global_idx)
-        ).argsort()
-
-        I_vv = eye(len(self.coarse_nodes), format="csc")
-
-        A_ii = self.A[interior_nodes[:, None], interior_nodes]
-        A_ie = self.A[interior_nodes[:, None], edge_nodes]
-
-        A_ee = self.A[edge_nodes[:, None], edge_nodes]
-        A_ev = self.A[edge_nodes[:, None], self.coarse_nodes_global_idx]
-        A_ei = self.A[edge_nodes[:, None], interior_nodes]
-        A_ie = self.A[interior_nodes[:, None], edge_nodes]
-        A_ee_mod = A_ee + diags(A_ei.diagonal(), format="csc")
-
-        A_ev_mod = spsolve(A_ee_mod, A_ev)
-        A_ie_mod = spsolve(A_ii, A_ie)
-
-        Phi_wirebasket = vstack((A_ie_mod @ A_ev_mod, -A_ev_mod, I_vv), format="csc").T
-        Phi = Phi_wirebasket[:, G]
-
-        return Phi
-
-    def _assemble_inverse_distance_matrix(self):
-        return None
+        return vertex_nodes, edge_nodes, interior_nodes
 
 
 class MsFEMBasisFunction(object):
