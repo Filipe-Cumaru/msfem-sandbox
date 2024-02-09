@@ -1,4 +1,4 @@
-from scipy.sparse import lil_matrix, csc_matrix, eye, vstack
+from scipy.sparse import lil_matrix, csc_matrix, eye, vstack, diags
 from scipy.integrate import quad
 from scipy.sparse.linalg import spsolve
 import numpy as np
@@ -365,6 +365,9 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         A_ee = self.A[self.edge_nodes[:, None], self.edge_nodes]
         A_ev = self.A[self.edge_nodes[:, None], self.vertex_nodes]
         A_ie = self.A[self.interior_nodes[:, None], self.edge_nodes]
+        A_ei = self.A[self.edge_nodes[:, None], self.interior_nodes]
+
+        A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
 
         A_ev_mod = spsolve(A_ee, A_ev)
         A_ie_mod = spsolve(A_ii, A_ie)
