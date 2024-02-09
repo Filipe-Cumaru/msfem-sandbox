@@ -1,4 +1,4 @@
-from scipy.sparse import lil_matrix, csc_matrix, eye, diags, vstack
+from scipy.sparse import lil_matrix, csc_matrix, eye, vstack
 from scipy.integrate import quad
 from scipy.sparse.linalg import spsolve
 import numpy as np
@@ -346,8 +346,9 @@ class Q1CoarseSpace(RGDSWCoarseSpace):
 
 
 class AMSCoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A):
+    def __init__(self, N, n, A, b):
         super().__init__(N, n, A, None)
+        self.b = b
         self.vertex_nodes, self.edge_nodes, self.interior_nodes = (
             self._group_nodes_into_ams_classes()
         )
@@ -371,7 +372,16 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         Phi_wirebasket = vstack((A_ie_mod @ A_ev_mod, -A_ev_mod, I_vv), format="csc").T
         Phi = Phi_wirebasket[:, self.G]
 
-        return Phi
+        cf = None
+        if return_cf:
+            b_i, b_e = self.b[self.interior_nodes], self.b[self.edge_nodes]
+            cf_ee = spsolve(A_ee, b_e)
+            cf_i = spsolve(A_ii, b_i - A_ie @ cf_ee)
+            cf = np.zeros(len(self.b))
+            cf[self.interior_nodes] = cf_i
+            cf[self.edge_nodes] = cf_ee
+
+        return Phi, cf
 
     def _assemble_inverse_distance_matrix(self):
         return None
