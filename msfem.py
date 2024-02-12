@@ -370,9 +370,9 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
 
         A_ev_mod = spsolve(A_ee, A_ev)
-        A_ie_mod = spsolve(A_ii, A_ie)
+        A_ii_mod = spsolve(A_ii, A_ie @ A_ev_mod)
 
-        Phi_wirebasket = vstack((A_ie_mod @ A_ev_mod, -A_ev_mod, I_vv), format="csc").T
+        Phi_wirebasket = vstack((A_ii_mod, -A_ev_mod, I_vv), format="csc").T
         Phi = Phi_wirebasket[:, self.G]
 
         cf = None
