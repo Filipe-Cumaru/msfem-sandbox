@@ -361,6 +361,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
 
         A_ii = self.A[self.interior_nodes[:, None], self.interior_nodes]
         A_ie = self.A[self.interior_nodes[:, None], self.edge_nodes]
+        A_iv = self.A[self.interior_nodes[:, None], self.vertex_nodes]
 
         A_ee = self.A[self.edge_nodes[:, None], self.edge_nodes]
         A_ev = self.A[self.edge_nodes[:, None], self.vertex_nodes]
@@ -369,7 +370,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
 
         A_ev_mod = spsolve(A_ee, A_ev)
-        A_ii_mod = spsolve(A_ii, A_ie @ A_ev_mod)
+        A_ii_mod = spsolve(A_ii, A_ie @ A_ev_mod - A_iv)
 
         Phi_wirebasket = vstack((A_ii_mod, -A_ev_mod, I_vv), format="csc").T
         Phi = Phi_wirebasket[:, self.G]
