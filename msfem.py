@@ -364,7 +364,6 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
 
         A_ee = self.A[self.edge_nodes[:, None], self.edge_nodes]
         A_ev = self.A[self.edge_nodes[:, None], self.vertex_nodes]
-        A_ie = self.A[self.interior_nodes[:, None], self.edge_nodes]
         A_ei = self.A[self.edge_nodes[:, None], self.interior_nodes]
 
         A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
