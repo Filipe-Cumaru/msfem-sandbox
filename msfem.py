@@ -357,6 +357,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         ).argsort()
 
     def assemble_operator(self, return_cf=False):
+        # Split the system matrix into each corresponding block.
         I_vv = eye(len(self.coarse_nodes), format="csc")
 
         A_ii = self.A[self.interior_nodes[:, None], self.interior_nodes]
@@ -369,14 +370,36 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
 
         A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
 
-        A_ev_mod = spsolve(A_ee, A_ev)
-        A_ii_mod = spsolve(A_ii, A_ie @ A_ev_mod - A_iv)
+        # Compute the initial value of the basis functions on the edges.
+        Phi_e = spsolve(A_ee, A_ev)
 
-        Phi_wirebasket = vstack((A_ii_mod, -A_ev_mod, I_vv), format="csc").T
+        # Since the FEM stencil may contain nodes that do not share an
+        # edge, the basis function on the edge nodes must be modified
+        # to prevent growth outside the support region and preserve the
+        # partition of unit.
+        # First, for each coarse node, the edge nodes that are not inside
+        # the support region are filtered.
+        Phi_e_in_edges_mask = self.D[self.edge_nodes, :] > 0
+        Phi_e = Phi_e.multiply(Phi_e_in_edges_mask)
+
+        # Next, the partition of unit is reinforced by normalization.
+        Phi_e_row_sum = Phi_e.sum(axis=1).A.flatten()
+        N_ee = diags(Phi_e_row_sum, format="csc")
+        Phi_e = N_ee @ Phi_e
+
+        # Since the edge terms were modified, the A_ie block must be changed
+        # accordingly by normalizing its columns.
+        A_ie = A_ie @ N_ee
+        Phi_i = spsolve(A_ii, A_ie @ Phi_e - A_iv)
+
+        # Assemble all blocks and sort the operator to the natural order.
+        Phi_wirebasket = vstack((Phi_i, Phi_e, I_vv), format="csc").T
         Phi = Phi_wirebasket[:, self.G]
 
+        # If `return_cf` is set, compute the correction function.
         cf = None
         if return_cf:
+            # Scale the RHS to handle high coefficient contrasts.
             E = self._compute_scaling_matrix()
             b_scaled = E @ self.b
             b_i, b_e = b_scaled[self.interior_nodes], b_scaled[self.edge_nodes]
@@ -389,7 +412,12 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         return Phi, cf
 
     def _assemble_inverse_distance_matrix(self):
-        return None
+        D = super()._assemble_inverse_distance_matrix()
+        D = D[:, self.coarse_nodes]
+        return D
+
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+        return np.ones(len(fine_nodes))
 
     def _group_nodes_into_ams_classes(self):
         vertex_nodes = self.coarse_nodes_global_idx[:]
@@ -409,12 +437,12 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
             np.union1d(edge_nodes, vertex_nodes),
         )
         return vertex_nodes, edge_nodes, interior_nodes
-    
+
     def _compute_scaling_matrix(self):
         max_edge_entries = self.A[self.edge_nodes, :].max(axis=1).A.flatten()
         min_edge_entries = self.A[self.edge_nodes, :].min(axis=1).A.flatten()
         A_edge_contrast = min_edge_entries / max_edge_entries
-        E_diag = np.ones(self.m ** 2)
+        E_diag = np.ones(self.m**2)
         E_diag[self.edge_nodes] = A_edge_contrast
         E = diags(E_diag, format="csr")
         return E
