@@ -73,9 +73,7 @@ class BaseTwoLevelASPreconditioner(object):
             col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
             P_values.extend(np.ones(len(Omega_i)))
 
-        return csc_matrix(
-            (P_values, (row_idx, col_idx)), shape=(self.m**2, self.N**2)
-        )
+        return csc_matrix((P_values, (row_idx, col_idx)), shape=(self.m**2, self.N**2))
 
     def _compute_overlapping_partitions(self):
         row_idx = []
