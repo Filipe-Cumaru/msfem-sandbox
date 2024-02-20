@@ -312,7 +312,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
             (self.interior_nodes, self.edge_nodes, self.vertex_nodes)
         ).argsort()
 
-    def assemble_operator(self, return_cf=False):
+    def assemble_operator(self):
         # Split the system matrix into each corresponding block.
         I_vv = eye(len(self.coarse_nodes), format="csc")
 
@@ -352,20 +352,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         Phi_wirebasket = vstack((Phi_i, Phi_e, I_vv), format="csc").T
         Phi = Phi_wirebasket[:, self.G]
 
-        # If `return_cf` is set, compute the correction function.
-        cf = None
-        if return_cf:
-            # Scale the RHS to handle high coefficient contrasts.
-            E = self._compute_scaling_matrix()
-            b_scaled = E @ self.b
-            b_i, b_e = b_scaled[self.interior_nodes], b_scaled[self.edge_nodes]
-            cf_ee = spsolve(A_ee, b_e)
-            cf_i = spsolve(A_ii, b_i - A_ie @ cf_ee)
-            cf = np.zeros(len(self.b))
-            cf[self.interior_nodes] = cf_i
-            cf[self.edge_nodes] = cf_ee
-
-        return Phi, cf
+        return Phi
 
     def _assemble_inverse_distance_matrix(self):
         D = super()._assemble_inverse_distance_matrix()
