@@ -4,6 +4,11 @@ from scipy.sparse.linalg import spsolve
 import numpy as np
 
 
+def set_sparse_matrix_rows_to_value(M, rows, value):
+    for row in rows:
+        M.data[M.indptr[row] : M.indptr[row + 1]] = value
+
+
 class MSBasisFunction(object):
     def __init__(self, N, n, c):
         """Constructor method.
@@ -388,3 +393,59 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         E_diag[self.edge_nodes] = A_edge_contrast
         E = diags(E_diag, format="csr")
         return E
+
+
+class MsFEMSlabCoarseSpace(MsFEMCoarseSpace):
+    def __init__(self, N, n, A, c, k):
+        # The slab size in terms of the number of layers of elements.
+        self.k = k
+
+        # A connectivity matrix indicating which nodes are neighbors.
+        self.M = (A != 0).astype(int)
+
+        super().__init__(N, n, A, c)
+
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
+        # Get the global indices for the coarse node and its neighbors.
+        _, _, nc_neighbors_idx = np.intersect1d(
+            [nc - 1, nc + 1, nc + self.N, nc - self.N],
+            self.coarse_nodes,
+            return_indices=True,
+        )
+        nc_neighbors_global_idx = self.coarse_nodes_global_idx[nc_neighbors_idx]
+        nc_global_idx = self.coarse_nodes_global_idx[self.coarse_nodes == nc]
+
+        # Retrieve the nodes in the support of the basis function.
+        supp_subdomains = self.P[nc_global_idx, :].nonzero()[1]
+        supp_nodes = self.P[:, supp_subdomains].nonzero()[0]
+
+        # Extend the interface nodes to a slab around the coarse edges.
+        slab = self._extend_edge_to_slab(fine_nodes, supp_nodes)
+        nc_slab_idx = np.where(slab == nc_global_idx)[0]
+        _, _, nc_neighbors_slab_idx = np.intersect1d(
+            slab, nc_neighbors_global_idx, return_indices=True
+        )
+
+        # Solve the Neumann problem on the slab.
+        A_slab = self.A[slab, slab[:, None]]
+        set_sparse_matrix_rows_to_value(A_slab, nc_neighbors_slab_idx, 0)
+        set_sparse_matrix_rows_to_value(A_slab, nc_slab_idx, 0)
+        A_slab[nc_neighbors_slab_idx, nc_neighbors_slab_idx] = 1
+        A_slab[nc_slab_idx, nc_slab_idx] = 1
+
+        b_slab = np.zeros(len(slab))
+        b_slab[nc_slab_idx] = 1
+        slab_inv_dist = spsolve(A_slab, b_slab)
+
+        # Restrict the solution on the slab to the edges.
+        edge_inv_dist = slab_inv_dist[np.isin(slab, fine_nodes, assume_unique=True)]
+
+        return edge_inv_dist
+
+    def _extend_edge_to_slab(self, edge_nodes, supp_nodes):
+        slab = edge_nodes[:]
+        for _ in range(self.k):
+            slab_neighbors = self.M[slab, :].nonzero()[1]
+            slab = np.union1d(slab, slab_neighbors)
+        slab = np.intersect1d(slab, supp_nodes)
+        return slab
