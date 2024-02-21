@@ -163,36 +163,36 @@ class RGDSWCoarseSpace(MSBasisFunction):
             Ni, Nj = nc % self.N, nc // self.N
             x_nc, y_nc = Ni * self.H, Nj * self.H
 
-            # Filter the fine nodes in the neighborhood of nc.
-            supp_mask = (np.abs(self.xs - x_nc) <= self.H) & (
-                np.abs(self.ys - y_nc) <= self.H
+            nc_global_idx = self.coarse_nodes_global_idx[self.coarse_nodes == nc]
+            supp_subdomains = self.P[nc_global_idx, :].nonzero()[1]
+            supp_nodes = self.P[:, supp_subdomains].nonzero()[0]
+            gamma_mask = (
+                self.P_B[supp_nodes[:, None], supp_subdomains].sum(axis=1).A.flatten()
+                > 1
             )
-            xs_supp = self.xs[supp_mask]
-            ys_supp = self.ys[supp_mask]
-            xs_interface = xs_supp[
-                np.isclose(xs_supp, x_nc) | np.isclose(ys_supp, y_nc)
-            ]
-            ys_interface = ys_supp[
-                np.isclose(xs_supp, x_nc) | np.isclose(ys_supp, y_nc)
-            ]
+            local_interface = supp_nodes[gamma_mask]
+            gamma_nodes = np.intersect1d(local_interface, gamma)
 
-            # Get the indices of the internal nodes.
-            xs_idx = np.round(xs_interface / self.h)
-            ys_idx = np.round(ys_interface / self.h)
-            global_idx = (xs_idx + ys_idx * self.m).astype(int)
-            int_nodes = np.intersect1d(global_idx, gamma)
-
-            inv_dist = self._compute_inv_distances(int_nodes, x_nc, y_nc)
+            inv_dist = self._compute_inv_distances(gamma_nodes, x_nc, y_nc, nc)
 
             D_values.extend(inv_dist)
-            D_row_idx.extend(int_nodes)
+            D_row_idx.extend(gamma_nodes)
             D_col_idx.extend(len(inv_dist) * [nc])
 
         D = csc_matrix((D_values, (D_row_idx, D_col_idx)), shape=(self.m**2, self.N**2))
 
         return D
 
-    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
+        """Computes the inverse distance from the nodes in `fine_nodes`
+         to the coarse node with coordinates (x_coarse, y_coarse).
+
+        Args:
+            fine_nodes (numpy.ndarray): The nodes for which the inverse distances will be computed.
+            x_coarse (float): The x coordinate of the coarse node of interest.
+            y_coarse (float): The y coordinate of the coarse node of interest.
+            nc (int): The local index of the coarse node.
+        """
         raise NotImplementedError()
 
     def _compute_partitions(self):
@@ -243,7 +243,7 @@ class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
     def __init__(self, N, n, A):
         super().__init__(N, n, A, None)
 
-    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         return np.ones(len(fine_nodes))
 
 
@@ -255,7 +255,7 @@ class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
     def __init__(self, N, n, A):
         super().__init__(N, n, A, None)
 
-    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         return (
             np.sqrt(
                 (self.xs[fine_nodes] - x_coarse) ** 2
@@ -269,7 +269,7 @@ class MsFEMCoarseSpace(RGDSWCoarseSpace):
     def __init__(self, N, n, A, c):
         super().__init__(N, n, A, c)
 
-    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         inv_dist = np.zeros(len(fine_nodes))
         cx = lambda x: 1 / self.c(x, y_coarse)
         cy = lambda y: 1 / self.c(x_coarse, y)
@@ -288,7 +288,7 @@ class Q1CoarseSpace(RGDSWCoarseSpace):
     def __init__(self, N, n, A):
         super().__init__(N, n, A, None)
 
-    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         inv_dist = np.zeros(len(fine_nodes))
         for i, n in enumerate(fine_nodes):
             xn, yn = self.xs[n], self.ys[n]
@@ -358,7 +358,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         D = D[:, self.coarse_nodes]
         return D
 
-    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse):
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         return np.ones(len(fine_nodes))
 
     def _group_nodes_into_ams_classes(self):
