@@ -331,7 +331,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
 
         # Compute the initial value of the basis functions on the edges.
-        Phi_e = spsolve(A_ee, A_ev)
+        Phi_e = -spsolve(A_ee, A_ev)
 
         # Since the FEM stencil may contain nodes that do not share an
         # edge, the basis function on the edge nodes must be modified
@@ -343,14 +343,13 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         Phi_e = Phi_e.multiply(Phi_e_in_edges_mask)
 
         # Next, the partition of unit is reinforced by normalization.
-        Phi_e_row_sum = Phi_e.sum(axis=1).A.flatten()
+        Phi_e_row_sum = 1 / Phi_e.sum(axis=1).A.flatten()
         N_ee = diags(Phi_e_row_sum, format="csc")
         Phi_e = N_ee @ Phi_e
 
         # Since the edge terms were modified, the A_ie block must be changed
         # accordingly by normalizing its columns.
-        A_ie = A_ie @ N_ee
-        Phi_i = spsolve(A_ii, A_ie @ Phi_e - A_iv)
+        Phi_i = -spsolve(A_ii, A_ie @ Phi_e + A_iv)
 
         # Assemble all blocks and sort the operator to the natural order.
         Phi_wirebasket = vstack((Phi_i, Phi_e, I_vv), format="csc").T
