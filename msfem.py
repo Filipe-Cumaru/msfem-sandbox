@@ -347,8 +347,6 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         N_ee = diags(Phi_e_row_sum, format="csc")
         Phi_e = N_ee @ Phi_e
 
-        # Since the edge terms were modified, the A_ie block must be changed
-        # accordingly by normalizing its columns.
         Phi_i = -spsolve(A_ii, A_ie @ Phi_e + A_iv)
 
         # Assemble all blocks and sort the operator to the natural order.
