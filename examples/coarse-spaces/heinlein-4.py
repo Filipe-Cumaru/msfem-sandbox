@@ -14,7 +14,8 @@ def main(args):
     N = args.N + 1
     n = args.n + 1
     coarse_space = args.coarse_space
-    run_example(input_dir, N, n, c, coarse_space)
+    k = args.k
+    run_example(input_dir, N, n, c, coarse_space, k)
 
 
 if __name__ == "__main__":

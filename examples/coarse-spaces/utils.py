@@ -24,11 +24,21 @@ def parse_args(example_description):
         "--coarse-space",
         type=str,
         help="The coarse space used to compute the basis functions.",
-        choices=["msfem", "q1", "rgdsw-opt-1", "rgdsw-opt-2-2", "ams"],
-        default="msfem",
+        choices=["msfem", "q1", "rgdsw-opt-1", "rgdsw-opt-2-2", "ams", "slab-msfem"],
         required=True,
     )
+    parser.add_argument(
+        "-k",
+        type=int,
+        help="The number of layers of nodes used in the edge slab. Required if using the coarse space slab-msfem",
+        default=None,
+        required=False,
+    )
+
     args = parser.parse_args()
+    if args.coarse_space == "slab-msfem" and args.k is None:
+        parser.error("Using the coarse space slab-msfem requires -k to be specified.")
+
     return args
 
 
@@ -40,7 +50,7 @@ def sort_ext_indices(p, xs, ys):
     return sorted_idx
 
 
-def run_example(input_dir, N, n, c, coarse_space):
+def run_example(input_dir, N, n, c, coarse_space, k):
     """Runs one of the examples in the `examples` directory.
 
     Args:
@@ -51,6 +61,7 @@ def run_example(input_dir, N, n, c, coarse_space):
         c (function): A function that computes the scalar coefficient of the
             elliptic problem.
         coarse_space (string): The coarse space used to compute the basis functions.
+        k (int): The number of layers of nodes used to define the edge slab for the slab-msfem coarse space.
     """
     m = (N - 1) * (n - 1) + 1
 
@@ -71,6 +82,8 @@ def run_example(input_dir, N, n, c, coarse_space):
         cs = msfem.RGDSWInverseDistanceCoarseSpace(N, n, A)
     elif coarse_space == "ams":
         cs = msfem.AMSCoarseSpace(N, n, A)
+    elif coarse_space == "slab-msfem":
+        cs = msfem.MsFEMSlabCoarseSpace(N, n, A, c, k)
     else:
         raise ValueError("Invalid coarse space choice.")
 
