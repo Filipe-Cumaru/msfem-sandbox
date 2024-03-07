@@ -65,8 +65,8 @@ class RGDSWCoarseSpace(MSBasisFunction):
         self.D = self._assemble_inverse_distance_matrix()
 
     def assemble_operator(self):
-        Phi_interface = self._compute_interface_basis_function()
-        Phi = lil_matrix(Phi_interface)
+        interface_pou = self._compute_interface_pou()
+        Phi = lil_matrix(interface_pou)
 
         for i in range((self.N - 1) ** 2):
             # The set of fine nodes in the subdomain.
@@ -103,9 +103,9 @@ class RGDSWCoarseSpace(MSBasisFunction):
             # between interior and boundary nodes of \Omega_i.
             Ai_IB = self.A[Omega_i_boundary, Omega_i_interior[:, None]]
 
-            # The contribution of the interface basis function for the subdomain
+            # The contribution of the interface POU to the subdomain
             # \Omega_i (c.f. Eq. 3 from Dohrmann and Windlund (2017)).
-            Psi_i = Phi_interface[Omega_i_coarse_nodes, Omega_i[:, None]]
+            Psi_i = interface_pou[Omega_i_coarse_nodes, Omega_i[:, None]]
 
             # From the slice of the interface prolongation operator, we extract
             # the contribution of the nodes on the boundary of \Omega_i.
@@ -125,7 +125,12 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
         return Phi
 
-    def _compute_interface_basis_function(self):
+    def _compute_interface_pou(self):
+        """Computes a partition of unit (POU) over the interface of the subdomains.
+
+        Returns:
+            csc_matrix: A sparse matrix representing the interface POU.
+        """
         Phi_row_idx = []
         Phi_col_idx = []
         Phi_values = []
