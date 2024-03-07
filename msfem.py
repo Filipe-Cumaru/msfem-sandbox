@@ -155,27 +155,27 @@ class RGDSWCoarseSpace(MSBasisFunction):
         Returns:
             csc_matrix: A sparse matrix representing the interface POU.
         """
-        Phi_row_idx = []
-        Phi_col_idx = []
-        Phi_values = []
+        ipou_row_idx = []
+        ipou_col_idx = []
+        ipou_values = []
 
         for nc in self.coarse_nodes:
             inv_dist_to_nc = self.D[:, nc].A.flatten()
             supp_nodes = np.where(inv_dist_to_nc != 0)[0]
             inv_dist_sum = self.D[supp_nodes, :].sum(axis=1).A.flatten()
-            Phi_values.extend(inv_dist_to_nc[supp_nodes] / inv_dist_sum)
-            Phi_row_idx.extend(len(inv_dist_sum) * [nc])
-            Phi_col_idx.extend(supp_nodes)
+            ipou_values.extend(inv_dist_to_nc[supp_nodes] / inv_dist_sum)
+            ipou_row_idx.extend(len(inv_dist_sum) * [nc])
+            ipou_col_idx.extend(supp_nodes)
 
-        Phi_values.extend(np.ones(len(self.coarse_nodes)))
-        Phi_row_idx.extend(self.coarse_nodes)
-        Phi_col_idx.extend(self.coarse_nodes_global_idx)
+        ipou_values.extend(np.ones(len(self.coarse_nodes)))
+        ipou_row_idx.extend(self.coarse_nodes)
+        ipou_col_idx.extend(self.coarse_nodes_global_idx)
 
-        Phi = csc_matrix(
-            (Phi_values, (Phi_row_idx, Phi_col_idx)), shape=(self.N**2, self.m**2)
+        interface_pou = csc_matrix(
+            (ipou_values, (ipou_row_idx, ipou_col_idx)), shape=(self.N**2, self.m**2)
         )
 
-        return Phi
+        return interface_pou
 
     def _assemble_inverse_distance_matrix(self):
         interface_nodes = np.array(
