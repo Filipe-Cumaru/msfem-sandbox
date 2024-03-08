@@ -48,9 +48,7 @@ class MSBasisFunction(object):
 
 
 class RGDSWCoarseSpace(MSBasisFunction):
-    def __init__(
-        self, N, n, A, c, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
-    ):
+    def __init__(self, N, n, A, c, null_space_type=NullSpaceType.DIFFUSION):
         super().__init__(N, n, c)
         self.A = A
         self.P, self.P_I, self.P_B = self._compute_partitions()
@@ -81,12 +79,12 @@ class RGDSWCoarseSpace(MSBasisFunction):
             )
         self.null_space_type = null_space_type
 
-        if dofs_map is not None:
-            self.dofs_map = dofs_map
-        elif self.null_space_type is NullSpaceType.DIFFUSION:
-            self.dofs_map = np.arange(self.m**2).reshape((self.m**2, 1))
+        if self.null_space_type is NullSpaceType.DIFFUSION:
+            self.num_dofs = 1
+            self.null_space_size = 1
         elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY:
-            self.dofs_map = np.arange(3 * self.m**2).reshape((self.m**2, 3))
+            self.num_dofs = 2
+            self.null_space_size = 3
 
     def assemble_operator(self):
         interface_pou = self._compute_interface_pou()
