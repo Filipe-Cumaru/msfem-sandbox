@@ -266,6 +266,27 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
         return P, P_I, P_B
 
+    def _assemble_null_space(self, c, Nc):
+        """Assemble the null space corresponding to the ancestors `Nc` of
+        the coarse node `c`.
+
+        Args:
+            c (int): Coarse node index
+            Nc (numpy.ndarray): Set of ancestors of `c`.
+        """
+        null_space = None
+        if self.null_space_type is NullSpaceType.DIFFUSION:
+            null_space = np.ones((len(Nc), 1))
+        elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY:
+            x_c, y_c = (c % self.N) * self.H, (c // self.N) * self.H
+            xs_n, ys_n = self.xs[Nc], self.ys[Nc]
+            xs_cn, ys_cn = xs_n - x_c, ys_n - y_c
+            null_space = np.zeros((len(Nc), 6))
+            null_space[:, 0] = null_space[:, 4] = 1
+            null_space[:, 2] = -ys_cn
+            null_space[:, 5] = xs_cn
+        return null_space
+
 
 class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
     """A RGDSW coarse space as proposed by Dohrmann and Windlund (2017) in
