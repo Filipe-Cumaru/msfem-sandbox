@@ -88,7 +88,7 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
     def assemble_operator(self):
         interface_pou = self._compute_interface_pou()
-        Phi = lil_matrix(interface_pou)
+        Phi = lil_matrix((self.N**2, self.num_dofs * self.m**2))
 
         for i in range((self.N - 1) ** 2):
             # The set of fine nodes in the subdomain.
@@ -113,8 +113,8 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
             # The vertices that are actually coarse nodes according to the
             # definition in Dohrmann and Windlund (2017).
-            Omega_i_coarse_nodes = np.intersect1d(
-                Omega_i_coarse_vertices, self.coarse_nodes
+            Omega_i_coarse_nodes, _, coarse_nodes_idx = np.intersect1d(
+                Omega_i_coarse_vertices, self.coarse_nodes, return_indices=True
             )
 
             # The portion of the system matrix corresponding to the interior nodes
@@ -125,21 +125,43 @@ class RGDSWCoarseSpace(MSBasisFunction):
             # between interior and boundary nodes of \Omega_i.
             Ai_IB = self.A[Omega_i_boundary, Omega_i_interior[:, None]]
 
-            # The contribution of the interface POU to the subdomain
-            # \Omega_i (c.f. Eq. 3 from Dohrmann and Windlund (2017)).
-            Psi_i = interface_pou[Omega_i_coarse_nodes, Omega_i[:, None]]
+            for c, c_idx in zip(Omega_i_coarse_nodes, coarse_nodes_idx):
+                # Ancestors of coarse node c.
+                Ni_c, _, Ni_c_ind = np.intersect1d(
+                    self.D[:, c].nonzero()[0], Omega_i, return_indices=True
+                )
 
-            # From the slice of the interface prolongation operator, we extract
-            # the contribution of the nodes on the boundary of \Omega_i.
-            boundary_mask = np.isin(Omega_i, Omega_i_boundary, assume_unique=True)
-            Psi_i_B = Psi_i[boundary_mask, :]
+                null_space = self._assemble_null_space(c, Ni_c)
 
-            # Finally, the increment for the coarse nodes in \Omega_i is computed
-            # as described in Dohrmann and Windlund (2017) (c.f. \Phi_{ic} in the paper).
-            Phi_i_IB_inc = spsolve(Ai_II, Ai_IB @ Psi_i_B).reshape(
-                (len(Omega_i_interior), len(Omega_i_coarse_nodes))
-            )
-            Phi[Omega_i_coarse_nodes, Omega_i_interior[:, None]] -= Phi_i_IB_inc
+                # The contribution of the interface POU to the subdomain
+                # \Omega_i (c.f. Eq. 3 from Dohrmann and Windlund (2017)).
+                Psi_ic_Nc = interface_pou[c, Ni_c].A.flatten()[:, None] * null_space
+                Psi_ic = csc_matrix(
+                    (
+                        Psi_ic_Nc.flatten(),
+                        (
+                            np.concatenate(
+                                [Ni_c_ind + i for i in range(self.null_space_size)]
+                            ),
+                            np.tile(
+                                np.arange(self.num_dofs), self.num_dofs * len(Ni_c)
+                            ),
+                        ),
+                    ),
+                    shape=(len(Omega_i) * self.num_dofs, self.null_space_size),
+                )
+
+                # From the slice of the interface prolongation operator, we extract
+                # the contribution of the nodes on the boundary of \Omega_i.
+                boundary_mask = np.isin(Omega_i, Omega_i_boundary, assume_unique=True)
+                Psi_ic_B = Psi_ic[boundary_mask, :]
+
+                # Finally, the increment for the coarse nodes in \Omega_i is computed
+                # as described in Dohrmann and Windlund (2017) (c.f. \Phi_{ic} in the paper).
+                Phi_i_IB_inc = spsolve(Ai_II, Ai_IB @ Psi_ic_B)
+                Phi[c, Omega_i] = Psi_ic.T
+                Phi[c, self.coarse_nodes_global_idx[c_idx]] = 1
+                Phi[c, Omega_i_interior] -= Phi_i_IB_inc
 
         # Restrict the prolongation operator to the coarse nodes.
         Phi = Phi.tocsc()
