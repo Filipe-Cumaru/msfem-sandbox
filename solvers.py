@@ -28,10 +28,10 @@ def cg(
         the tridiagonal matrix is also returned.
     """
     # Initialization of the iterative variables.
-    r_curr = b - A @ x0 if x0 is not None else b[:]
-    z_curr = M.matvec(r_curr) if M is not None else r_curr[:]
-    p_curr = z_curr[:] if M is not None else r_curr[:]
-    x_curr = x0 if x0 is not None else np.zeros(len(b))
+    r_curr = b - A @ x0 if x0 is not None else b.copy()
+    z_curr = M.matvec(r_curr) if M is not None else r_curr.copy()
+    p_curr = z_curr.copy() if M is not None else r_curr.copy()
+    x_curr = x0.copy() if x0 is not None else np.zeros(len(b))
 
     # An array that stores the values of the CG coefficients.
     # This will be used to assemble Lanczo's tridiagonal matrix.
