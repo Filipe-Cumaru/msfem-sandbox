@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import splu
+from msfem import NullSpaceType
 
 
 class BaseTwoLevelASPreconditioner(object):
@@ -8,7 +9,9 @@ class BaseTwoLevelASPreconditioner(object):
     two-level Additive Schwarz preconditioner.
     """
 
-    def __init__(self, A, Phi, N, n, k) -> None:
+    def __init__(
+        self, A, Phi, N, n, k, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+    ) -> None:
         """Constructor
 
         Args:
@@ -18,6 +21,10 @@ class BaseTwoLevelASPreconditioner(object):
             N (int): Number of subdomains on each direction.
             n (int): Number of cells per subdomain on each direction.
             k (int): Number of layers for the overlap.
+            null_space_type(NullSpaceType, optional): The kind of problem solved.
+            Optional, defaults to NullSpaceType.DIFFUSION.
+            dofs_map(numpy.ndarray, optional): A map from the grid nodes to the DoFs of the problem
+            as a # nodes X # dofs numpy array. Optional, defaults to None.
         """
         self.A = A
         self.Phi = Phi
@@ -28,14 +35,30 @@ class BaseTwoLevelASPreconditioner(object):
         # Number of nodes on each direction for the global domain.
         self.m = self.N * self.n + 1
 
-        # Coarse grid size.
-        self.H = 1 / self.N
+        if not isinstance(null_space_type, NullSpaceType):
+            raise ValueError(
+                "Invalid null space type. Must be taken from the enumeration NullSpaceType."
+            )
+        self.null_space_type = null_space_type
 
-        # Fine grid size.
-        self.h = 1 / self.n
+        if self.null_space_type is NullSpaceType.DIFFUSION:
+            self.dofs_map = (
+                dofs_map
+                if dofs_map is not None
+                else np.arange(self.m**2).reshape((self.m**2, 1))
+            )
+            self.num_dofs = 1
+        elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY:
+            self.dofs_map = (
+                dofs_map
+                if dofs_map is not None
+                else np.array([[2 * i, 2 * i + 1] for i in range(self.m**2)])
+            )
+            self.num_dofs = 2
 
         # A connectivity matrix indicating which nodes are neighbors.
-        self.M = (self.A != 0).astype(int)
+        dofs = self.dofs_map[:, 0].flatten()
+        self.M = (self.A[dofs[:, None], dofs] != 0).astype(int)
 
         # The boundary nodes extracted from the system matrix.
         self.boundary_nodes = np.where(self.M.sum(axis=1).A.flatten() == 1)[0]
@@ -123,8 +146,12 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
     preconditioner using MsFEM basis functions as a coarse space.
     """
 
-    def __init__(self, A, Phi, N, n, k) -> None:
-        super().__init__(A, Phi, N, n, k)
+    def __init__(
+        self, A, Phi, N, n, k, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+    ) -> None:
+        super().__init__(
+            A, Phi, N, n, k, null_space_type=null_space_type, dofs_map=dofs_map
+        )
         self.A_i_lu_decompostions = self._compute_local_lu_decompositions()
         self.A_0_lu = splu(self.Phi @ (self.A @ self.Phi.transpose()))
 
@@ -138,15 +165,16 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
         Returns:
             numpy.ndarray: The preconditioned iterate.
         """
-        y = np.zeros(self.m**2)
+        y = np.zeros(self.num_dofs * (self.m**2))
 
         # First level.
         for i in range(self.N**2):
             Omega_i_extended = self.P_extended[:, i].nonzero()[0]
+            Omega_i_extended_dofs = self.dofs_map[Omega_i_extended, :].flatten()
             A_i_lu = self.A_i_lu_decompostions[i]
-            x_i = x[Omega_i_extended]
+            x_i = x[Omega_i_extended_dofs]
             y_i = A_i_lu.solve(x_i)
-            y[Omega_i_extended] += y_i
+            y[Omega_i_extended_dofs] += y_i
 
         # Second level.
         x_0 = self.Phi @ x
@@ -159,7 +187,8 @@ class TwoLevelASPreconditioner(BaseTwoLevelASPreconditioner):
         A_lu_decompositions = []
         for i in range(self.N**2):
             Omega_i_extended = self.P_extended[:, i].nonzero()[0]
-            A_i = self.A[Omega_i_extended, Omega_i_extended[:, None]]
+            Omega_i_extended_dofs = self.dofs_map[Omega_i_extended, :].flatten()
+            A_i = self.A[Omega_i_extended_dofs, Omega_i_extended_dofs[:, None]]
             A_i_lu = splu(A_i)
             A_lu_decompositions.append(A_i_lu)
         return A_lu_decompositions
