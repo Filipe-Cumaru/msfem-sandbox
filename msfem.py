@@ -345,8 +345,10 @@ class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
     Eq. 1 (option 1).
     """
 
-    def __init__(self, N, n, A):
-        super().__init__(N, n, A, None)
+    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
+        super().__init__(
+            N, n, A, None, null_space_type=null_space_type, dofs_map=dofs_map
+        )
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         return np.ones(len(fine_nodes))
@@ -357,8 +359,10 @@ class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
     Eq. 5 (option 2.2).
     """
 
-    def __init__(self, N, n, A):
-        super().__init__(N, n, A, None)
+    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
+        super().__init__(
+            N, n, A, None, null_space_type=null_space_type, dofs_map=dofs_map
+        )
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         return (
@@ -371,8 +375,10 @@ class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
 
 
 class MsFEMCoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A, c):
-        super().__init__(N, n, A, c)
+    def __init__(
+        self, N, n, A, c, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+    ):
+        super().__init__(N, n, A, c, null_space_type=null_space_type, dofs_map=dofs_map)
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         inv_dist = np.zeros(len(fine_nodes))
@@ -390,8 +396,10 @@ class MsFEMCoarseSpace(RGDSWCoarseSpace):
 
 
 class Q1CoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A):
-        super().__init__(N, n, A, None)
+    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
+        super().__init__(
+            N, n, A, None, null_space_type=null_space_type, dofs_map=dofs_map
+        )
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         inv_dist = np.zeros(len(fine_nodes))
@@ -493,14 +501,16 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
 
 
 class MsFEMSlabCoarseSpace(MsFEMCoarseSpace):
-    def __init__(self, N, n, A, c, k):
+    def __init__(
+        self, N, n, A, c, k, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+    ):
         # The slab size in terms of the number of layers of elements.
         self.k = k
 
         # A connectivity matrix indicating which nodes are neighbors.
         self.M = (A != 0).astype(int)
 
-        super().__init__(N, n, A, c)
+        super().__init__(N, n, A, c, null_space_type=null_space_type, dofs_map=dofs_map)
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         # Get the global indices for the coarse node and its neighbors.
