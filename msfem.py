@@ -142,7 +142,10 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
             for c, c_idx in zip(Omega_i_coarse_nodes, coarse_nodes_idx):
                 # Ancestors of coarse node c.
-                Ni_c = np.intersect1d(self.D[:, c].nonzero()[0], Omega_i)
+                Ni_c = np.union1d(
+                    np.intersect1d(self.D[:, c].nonzero()[0], Omega_i),
+                    [self.coarse_nodes_global_idx[c_idx]],
+                )
                 _, _, Ni_c_dofs_ind = np.intersect1d(
                     self.dofs_map[Ni_c, :].flatten(), Omega_i_dofs, return_indices=True
                 )
@@ -182,10 +185,6 @@ class RGDSWCoarseSpace(MSBasisFunction):
                     [c * self.null_space_size + i for i in range(self.null_space_size)]
                 ).reshape((self.null_space_size, 1))
                 Phi[c_null_space_idx, Omega_i_dofs] = Psi_ic.T
-                Phi[
-                    c_null_space_idx,
-                    self.dofs_map[self.coarse_nodes_global_idx[c_idx], :].flatten(),
-                ] = 1
                 Phi[c_null_space_idx, Omega_i_interior_dofs] -= Phi_i_IB_inc.T
 
         # Restrict the prolongation operator to the coarse nodes.
