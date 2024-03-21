@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.sparse import diags
+from scipy.sparse.linalg import spilu, splu, bicgstab, LinearOperator
 
 
 def cg(
@@ -66,5 +67,53 @@ def cg(
             format="csc",
         )
         return x_curr, T_m
+
+    return x_curr
+
+
+def two_stage_ms_solver(
+    A, b, Phi, tol=1e-5, maxiter=1000, x0=None, callback=None, n_s=10
+):
+    """A two-stage multiscale solver based on the iterative procedure introduced in
+     Wang, Hajibeygi and Tchelepi (2014) (https://doi.org/10.1016/j.jcp.2013.11.024).
+
+    Args:
+        A (sparse matrix): The matrix of the linear system.
+        b (numpy.ndarray): The RHS vector.
+        Phi (sparse matrix): The multiscale basis functions as an operator.
+        tol (float, optional): Residual tolerance for convergence. Defaults to 1e-5.
+        maxiter (int, optional): Maximum number of iterations. Defaults to 1000.
+        x0 (numpy.ndarray, optional): Initial solution guess.
+            If not provided, the prolonged multiscale solution is used. Defaults to None.
+        callback (callable, optional): User-supplied function to call after each iteration.
+            It is called as callback(xk), where xk is the current iterate of the solution. Defaults to None.
+        n_s (int, optional): Number of smoothing steps used at the local stage. Defaults to 10.
+
+    Returns:
+        numpy.ndarray: The converged solution.
+    """
+    M_ilu = spilu(A)
+    M_ilu_op = LinearOperator(A.shape, lambda x: M_ilu.solve(x))
+    A_c_lu = splu(Phi @ (A @ Phi.T))
+
+    x_curr = x0.copy() if x0 is not None else Phi.T @ (A_c_lu.solve(Phi @ b))
+    r_curr = b - A @ x_curr
+
+    for _ in range(maxiter):
+        # Global stage
+        dx_global = Phi.T @ (A_c_lu.solve(Phi @ r_curr))
+        r_global = r_curr - A @ dx_global
+
+        # Local stage
+        dx_local, _ = bicgstab(A, r_global, M=M_ilu_op, maxiter=n_s)
+
+        x_curr += dx_global + dx_local
+        r_curr = b - A @ x_curr
+
+        if callback is not None:
+            callback(x_curr)
+
+        if np.linalg.norm(r_curr) < tol:
+            break
 
     return x_curr
