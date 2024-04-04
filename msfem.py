@@ -13,6 +13,7 @@ def set_sparse_matrix_rows_to_value(M, rows, value):
 class NullSpaceType(Enum):
     DIFFUSION = 1
     LINEAR_ELASTICITY = 2
+    LINEAR_ELASTICITY_NO_ROTATION = 3
 
 
 class MSBasisFunction(object):
@@ -92,6 +93,14 @@ class RGDSWCoarseSpace(MSBasisFunction):
         elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY:
             self.num_dofs = 2
             self.null_space_size = 3
+            self.dofs_map = (
+                dofs_map
+                if dofs_map is not None
+                else np.array([[2 * i, 2 * i + 1] for i in range(self.m**2)])
+            )
+        elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY_NO_ROTATION:
+            self.num_dofs = 2
+            self.null_space_size = 2
             self.dofs_map = (
                 dofs_map
                 if dofs_map is not None
@@ -337,6 +346,9 @@ class RGDSWCoarseSpace(MSBasisFunction):
             null_space[:, 0] = null_space[:, 4] = 1
             null_space[:, 2] = -ys_cn
             null_space[:, 5] = xs_cn
+        elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY_NO_ROTATION:
+            null_space = np.zeros((len(Nc), 4))
+            null_space[:, 0] = null_space[:, 3] = 1
         return null_space
 
 
