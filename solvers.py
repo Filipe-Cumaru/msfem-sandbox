@@ -59,8 +59,8 @@ def cg(
 
     if return_lanczos:
         T_m_main_diag = 1 / alpha
-        T_m_main_diag[1:] += beta[1:] / alpha[1:]
-        T_m_lower_diag = T_m_upper_diag = np.sqrt(beta[1:]) / alpha[:-1]
+        T_m_main_diag[1:] += beta[:-1] / alpha[:-1]
+        T_m_lower_diag = T_m_upper_diag = np.sqrt(beta[:-1]) / alpha[:-1]
         T_m = diags(
             [T_m_lower_diag, T_m_main_diag, T_m_upper_diag],
             offsets=[-1, 0, 1],
