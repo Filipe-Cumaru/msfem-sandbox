@@ -4,12 +4,28 @@ from petsc4py import PETSc
 from dolfinx import mesh, fem
 from dolfinx.fem import petsc
 from scipy.sparse import csr_matrix
-from context import msfem, schwarz
+from scipy.sparse.linalg import LinearOperator
+
 import numpy as np
 import ufl
 import argparse
 
+import msfem
+import schwarz
+import solvers
+
 np.random.seed(42)
+
+
+class IterationsCounter(object):
+    def __init__(self, disp=True):
+        self._disp = disp
+        self.niter = 0
+
+    def __call__(self, rk=None):
+        self.niter += 1
+        if self._disp:
+            print("iter %3i\trk = %s" % (self.niter, str(rk)))
 
 
 class FEMProblem(object):
@@ -188,7 +204,9 @@ def run_example(
     precond: str,
     coarse_space: str,
     slab_size: int,
-    coeff: Callable,
+    coeff_fem: Callable,
+    coeff_eval: Callable,
+    problem_type: msfem.NullSpaceType,
 ):
     """Runs an example from the `examples` folder.
 
@@ -199,6 +217,63 @@ def run_example(
         precond (str): The preconditioning method to be used.
         coarse_space (str): The coarse space used to compute the basis functions.
         slab_size (int): The number of layers of nodes used in the edge slab. Required if using the coarse space slab-msfem.
-        coeff (Callable): A function that computes the coefficient function for the MsFEM coarse space.
+        coeff_fem (Callable): A callable object that computes the coefficient function using DOLFINx. Required if using a MsFEM coarse space.
+        coeff_eval (Callable): A callable object that evaluates the coefficient function nodally. Required if using a MsFEM coarse space.
+        problem_type (msfem.NullSpaceType): The problem type to be run (diffusion or linear elasticity).
     """
-    pass
+    # Number of nodes on each direction (m x m grid).
+    m = N * n + 1
+
+    # Initialization of the local dof map according to the type of problem.
+    if problem_type is msfem.NullSpaceType.DIFFUSION:
+        fem_problem = DiffusionFEMProblem(m-1, coeff_fem)
+        dofs_map = np.arange(m**2, dtype=int).reshape((m**2, 1))
+    elif problem_type is msfem.NullSpaceType.LINEAR_ELASTICITY:
+        fem_problem = LinearElasticityFEMProblem(m-1, coeff_fem)
+        ns = np.arange(m**2, dtype=int)
+        dofs_map = np.zeros((m**2, 2), dtype=int)
+        dofs_map[:, 0] = 2 * ns
+        dofs_map[:, 1] = 2 * ns + 1
+    else:
+        raise ValueError(
+            "The problem type must be either diffusion or linear elasticity."
+        )
+
+    # Assembly of the FE system of equations.
+    A, b, grid = fem_problem.assemble()
+
+    # Reordering of the system so it is consistent with the
+    # definition adopted in the coarse space.
+    xs, ys = np.meshgrid(np.linspace(0, 1, m), np.linspace(0, 1, m))
+    idx = sort_ext_indices(grid, xs.flatten(), ys.flatten())
+    for i in range(dofs_map.shape[1]):
+        dofs_map[:, i] = dofs_map[idx, i]
+    dofs_idx = dofs_map.flatten()
+    A = A[:, dofs_idx]
+    A = A[dofs_idx, :]
+    b = b[dofs_idx]
+
+    # Initialization of the coarse space.
+    if coarse_space == "msfem":
+        cs = msfem.MsFEMCoarseSpace(N + 1, n + 1, A, coeff_eval, problem_type)
+    elif coarse_space == "q1":
+        cs = msfem.Q1CoarseSpace(N + 1, n + 1, A, problem_type)
+    elif coarse_space == "rgdsw-opt-1":
+        cs = msfem.RGDSWConstantCoarseSpace(N + 1, n + 1, A, problem_type)
+    elif coarse_space == "rgdsw-opt-2-2":
+        cs = msfem.RGDSWInverseDistanceCoarseSpace(N + 1, n + 1, A, problem_type)
+    elif coarse_space == "slab-msfem":
+        cs = msfem.MsFEMSlabCoarseSpace(N + 1, n + 1, A, coeff_eval, slab_size, problem_type)
+    else:
+        raise ValueError("Invalid coarse space.")
+
+    # Computes the coarse interpolation operator equiv. to
+    # the multiscale prolongation operator.
+    Phi = cs.assemble_operator()
+
+    # Solution of the system of equations using the Schwarz preconditioner.
+    precond_op = schwarz.TwoLevelASPreconditioner(
+        A, Phi, N, n, k, problem_type, dofs_map
+    )
+    M_as = LinearOperator(A.shape, lambda x: precond_op.apply(x))
+    x = solvers.cg(A, b, M=M_as, callback=IterationsCounter())
