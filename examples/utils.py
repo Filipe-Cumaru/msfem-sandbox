@@ -9,6 +9,7 @@ from scipy.sparse.linalg import LinearOperator
 import numpy as np
 import ufl
 import argparse
+import os
 
 import msfem
 import schwarz
@@ -179,6 +180,11 @@ def parse_args(example_description):
         default=None,
         required=False,
     )
+    parser.add_argument(
+        "--enable-output",
+        action="store_true",
+        help="Enables the output. The solution will be saved in the `output` directory as a .npy file.",
+    )
 
     args = parser.parse_args()
     if args.precond == "two-level" and args.coarse_space is None:
@@ -207,6 +213,7 @@ def run_example(
     coeff_fem: Callable,
     coeff_eval: Callable,
     problem_type: msfem.NullSpaceType,
+    output: bool,
 ):
     """Runs an example from the `examples` folder.
 
@@ -295,5 +302,16 @@ def run_example(
     M_as = LinearOperator(A.shape, lambda x: precond_op.apply(x))
     it_counter = IterationsCounter(disp=False)
     x = solvers.cg(A, b, M=M_as, callback=it_counter)
+
+    if output:
+        if not os.path.exists("./output"):
+            os.mkdir("./output")
+        fname = (
+            f"solution_{m-1}x{m-1}_{N}x{N}_{precond}"
+            + (f"_{coarse_space}" if precond == "two-level" else "")
+            + ".npy"
+        )
+        np.save(f"./output/{fname}", x)
+
     print(f"Number of iterations: {it_counter.niter}")
     print("===> Done ✔.")
