@@ -264,9 +264,7 @@ def run_example(
 
     if precond == "single-level":
         print("Initializing the preconditioner.")
-        precond_op = schwarz.SingleLevelASPreconditioner(
-            A, N, n, k, problem_type, dofs_map
-        )
+        precond_op = schwarz.SingleLevelASPreconditioner(A, N, n, k, problem_type)
         print("===> Done ✔.")
     elif precond == "two-level":
         # Initialization of the coarse space.
@@ -292,9 +290,7 @@ def run_example(
         print("===> Done ✔.")
 
         print("Initializing the preconditioner.")
-        precond_op = schwarz.TwoLevelASPreconditioner(
-            A, Phi, N, n, k, problem_type, dofs_map
-        )
+        precond_op = schwarz.TwoLevelASPreconditioner(A, Phi, N, n, k, problem_type)
         print("===> Done ✔.")
 
     # Solution of the system of equations using the Schwarz preconditioner.
