@@ -94,4 +94,4 @@ Much of the work done in this repository is based on the references below.
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 (GPL-3) License - see the LICENSE.md file for details.
+This project is licensed under the MIT License - see the LICENSE.md file for details.
