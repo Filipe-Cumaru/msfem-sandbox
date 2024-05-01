@@ -225,11 +225,12 @@ def run_example(
     m = N * n + 1
 
     # Initialization of the local dof map according to the type of problem.
+    print("Assembling the FE problem.")
     if problem_type is msfem.NullSpaceType.DIFFUSION:
-        fem_problem = DiffusionFEMProblem(m-1, coeff_fem)
+        fem_problem = DiffusionFEMProblem(m - 1, coeff_fem)
         dofs_map = np.arange(m**2, dtype=int).reshape((m**2, 1))
     elif problem_type is msfem.NullSpaceType.LINEAR_ELASTICITY:
-        fem_problem = LinearElasticityFEMProblem(m-1, coeff_fem)
+        fem_problem = LinearElasticityFEMProblem(m - 1, coeff_fem)
         ns = np.arange(m**2, dtype=int)
         dofs_map = np.zeros((m**2, 2), dtype=int)
         dofs_map[:, 0] = 2 * ns
@@ -241,6 +242,7 @@ def run_example(
 
     # Assembly of the FE system of equations.
     A, b, grid = fem_problem.assemble()
+    print("===> Done ✔.")
 
     # Reordering of the system so it is consistent with the
     # definition adopted in the coarse space.
@@ -253,27 +255,45 @@ def run_example(
     A = A[dofs_idx, :]
     b = b[dofs_idx]
 
-    # Initialization of the coarse space.
-    if coarse_space == "msfem":
-        cs = msfem.MsFEMCoarseSpace(N + 1, n + 1, A, coeff_eval, problem_type)
-    elif coarse_space == "q1":
-        cs = msfem.Q1CoarseSpace(N + 1, n + 1, A, problem_type)
-    elif coarse_space == "rgdsw-opt-1":
-        cs = msfem.RGDSWConstantCoarseSpace(N + 1, n + 1, A, problem_type)
-    elif coarse_space == "rgdsw-opt-2-2":
-        cs = msfem.RGDSWInverseDistanceCoarseSpace(N + 1, n + 1, A, problem_type)
-    elif coarse_space == "slab-msfem":
-        cs = msfem.MsFEMSlabCoarseSpace(N + 1, n + 1, A, coeff_eval, slab_size, problem_type)
-    else:
-        raise ValueError("Invalid coarse space.")
+    if precond == "single-level":
+        print("Initializing the preconditioner.")
+        precond_op = schwarz.SingleLevelASPreconditioner(
+            A, N, n, k, problem_type, dofs_map
+        )
+        print("===> Done ✔.")
+    elif precond == "two-level":
+        # Initialization of the coarse space.
+        print("Initializing the coarse space.")
+        if coarse_space == "msfem":
+            cs = msfem.MsFEMCoarseSpace(N + 1, n + 1, A, coeff_eval, problem_type)
+        elif coarse_space == "q1":
+            cs = msfem.Q1CoarseSpace(N + 1, n + 1, A, problem_type)
+        elif coarse_space == "rgdsw-opt-1":
+            cs = msfem.RGDSWConstantCoarseSpace(N + 1, n + 1, A, problem_type)
+        elif coarse_space == "rgdsw-opt-2-2":
+            cs = msfem.RGDSWInverseDistanceCoarseSpace(N + 1, n + 1, A, problem_type)
+        elif coarse_space == "slab-msfem":
+            cs = msfem.MsFEMSlabCoarseSpace(
+                N + 1, n + 1, A, coeff_eval, slab_size, problem_type
+            )
+        else:
+            raise ValueError("Invalid coarse space.")
 
-    # Computes the coarse interpolation operator equiv. to
-    # the multiscale prolongation operator.
-    Phi = cs.assemble_operator()
+        # Computes the coarse interpolation operator equiv. to
+        # the multiscale prolongation operator.
+        Phi = cs.assemble_operator()
+        print("===> Done ✔.")
+
+        print("Initializing the preconditioner.")
+        precond_op = schwarz.TwoLevelASPreconditioner(
+            A, Phi, N, n, k, problem_type, dofs_map
+        )
+        print("===> Done ✔.")
 
     # Solution of the system of equations using the Schwarz preconditioner.
-    precond_op = schwarz.TwoLevelASPreconditioner(
-        A, Phi, N, n, k, problem_type, dofs_map
-    )
+    print("Solving the system of equations.")
     M_as = LinearOperator(A.shape, lambda x: precond_op.apply(x))
-    x = solvers.cg(A, b, M=M_as, callback=IterationsCounter())
+    it_counter = IterationsCounter(disp=False)
+    x = solvers.cg(A, b, M=M_as, callback=it_counter)
+    print(f"Number of iterations: {it_counter.niter}")
+    print("===> Done ✔.")
