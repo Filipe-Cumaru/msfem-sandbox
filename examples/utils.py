@@ -181,7 +181,7 @@ def parse_args(example_description):
         required=False,
     )
     parser.add_argument(
-        "--enable-output",
+        "--output",
         action="store_true",
         help="Enables the output. The solution will be saved in the `output` directory as a .npy file.",
     )
