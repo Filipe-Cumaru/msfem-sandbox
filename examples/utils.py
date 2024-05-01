@@ -3,7 +3,7 @@ from mpi4py import MPI
 from petsc4py import PETSc
 from dolfinx import mesh, fem
 from dolfinx.fem import petsc
-from scipy.sparse import csr_matrix
+from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import LinearOperator
 
 import numpy as np
@@ -77,7 +77,7 @@ class FEMProblem(object):
         petsc.set_bc(b, [bc])
 
         # Exports the LHS and RHS to a SciPy friendly format.
-        A_out = csr_matrix(A.getValuesCSR()[::-1], shape=A.size)
+        A_out = csc_matrix(A.getValuesCSR()[::-1], shape=A.size)
         b_out = b.array[:]
         grid = self.msh.geometry.x[:, 0:2].T
 
