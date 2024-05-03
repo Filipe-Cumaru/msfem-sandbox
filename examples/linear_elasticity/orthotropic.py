@@ -54,8 +54,8 @@ def coeff_eval(x, y):
     ) & (np.isclose(np.abs(ycs - y), (2 * margin)) | (np.abs(ycs - y) < (2 * margin)))
 
     E1, E2, Nu = 1e4, 1, 0.3
-    Lambda1 = E1 * Nu / (1 - Nu**2)
-    Lambda2 = E2 * Nu / (1 - Nu**2)
+    Lambda1 = E1 * Nu / ((1 + Nu) * (1 - 2 * Nu))
+    Lambda2 = E2 * Nu / ((1 + Nu) * (1 - 2 * Nu))
 
     if np.any(horizontal_check & vertical_check):
         coeff = 2 * Lambda1
@@ -107,7 +107,7 @@ def main(args):
         coeff_fem,
         coeff_eval,
         problem_type=msfem.NullSpaceType.LINEAR_ELASTICITY,
-        output=args.output
+        output=args.output,
     )
 
 
