@@ -28,7 +28,7 @@ python3 -m examples.linear_elasticity.dohrmann --help
 
 ## Authors
 
-[Filipe Cumaru](https://github.com/Filipe-Cumaru)
+[Filipe Cumaru](https://filipe-cumaru.github.io/)
 
 ## References
 
