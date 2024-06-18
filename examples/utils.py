@@ -169,7 +169,15 @@ def parse_args(example_description):
         "--coarse-space",
         type=str,
         help="The coarse space used to compute the basis functions. Required if using a two-level preconditioner.",
-        choices=["msfem", "q1", "rgdsw-opt-1", "rgdsw-opt-2-2", "ams", "slab-msfem"],
+        choices=[
+            "msfem",
+            "q1",
+            "rgdsw-opt-1",
+            "rgdsw-opt-2-2",
+            "ams",
+            "slab-msfem",
+            "gdsw",
+        ],
         default=None,
         required=False,
     )
@@ -281,6 +289,8 @@ def run_example(
             cs = msfem.MsFEMSlabCoarseSpace(
                 N + 1, n + 1, A, coeff_eval, slab_size, problem_type
             )
+        elif coarse_space == "gdsw":
+            cs = msfem.GDSWCoarseSpace(N + 1, n + 1, A, problem_type)
         else:
             raise ValueError("Invalid coarse space.")
 
