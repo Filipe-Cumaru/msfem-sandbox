@@ -130,14 +130,6 @@ class LinearElasticityFEMProblem(FEMProblem):
         return self._voigt2stress(ufl.dot(C, self._strain2voigt(self._sym_grad(u))))
 
 
-def sort_ext_indices(p, xs, ys):
-    p_sorted = np.vstack((xs, ys)).T
-    sorted_idx = np.zeros(len(p[0]), dtype=int)
-    for i, (nx, ny) in enumerate(p_sorted):
-        sorted_idx[i] = np.where(np.isclose(p[0], nx) & np.isclose(p[1], ny))[0][0]
-    return sorted_idx
-
-
 def parse_args(example_description):
     parser = argparse.ArgumentParser(description=example_description)
     parser.add_argument(
@@ -261,8 +253,7 @@ def run_example(
 
     # Reordering of the system so it is consistent with the
     # definition adopted in the coarse space.
-    xs, ys = np.meshgrid(np.linspace(0, 1, m), np.linspace(0, 1, m))
-    idx = sort_ext_indices(grid, xs.flatten(), ys.flatten())
+    idx = np.lexsort((grid[0], grid[1]))
     for i in range(dofs_map.shape[1]):
         dofs_map[:, i] = dofs_map[idx, i]
     dofs_idx = dofs_map.flatten()
