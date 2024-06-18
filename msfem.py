@@ -568,3 +568,67 @@ class MsFEMSlabCoarseSpace(MsFEMCoarseSpace):
             slab = np.union1d(slab, slab_neighbors)
         slab = np.intersect1d(slab, supp_nodes)
         return slab
+
+
+class GDSWCoarseSpace(RGDSWCoarseSpace):
+    def assemble_operator(self):
+        # Interface nodes
+        Gamma = np.setdiff1d(
+            np.where(self.P_B.sum(axis=1) > 1)[0], self.boundary_fine_nodes
+        )
+
+        # Interior nodes
+        I = np.setdiff1d(np.arange(self.m**2), Gamma)
+
+        # Blocks for the discrete harmonic extension.
+        A_II = self.A[I[:, None], I]
+        A_IGamma = self.A[I[:, None], Gamma]
+
+        # Interface basis functions.
+        Phi_int = self._assemble_interface_op()
+        Phi_Gamma = Phi_int[Gamma, :]
+
+        # Compute the discrete harmonic extension from the
+        # interface to the interior.
+        Phi_I = -spsolve(A_II, A_IGamma) @ Phi_Gamma
+
+        # Assemble the whole operator.
+        Phi = csc_matrix(Phi_int)
+        Phi[I, :] = Phi_I[:]
+
+        return Phi.T
+
+    def _assemble_interface_op(self):
+        Phi_int_cols, Phi_int_rows = [], []
+
+        # Set the interface values on the edges.
+        E = np.setdiff1d(
+            np.where(self.P_B.sum(axis=1) == 2)[0], self.boundary_fine_nodes
+        )
+        shared_edges = self.P_B[E, :].nonzero()[1].reshape((len(E), 2))
+        sorted_edges = np.unique(shared_edges, axis=0)
+        for i, (e1, e2) in enumerate(sorted_edges):
+            e_nodes = E[(shared_edges[:, 0] == e1) & (shared_edges[:, 1] == e2)]
+            Phi_int_rows.extend(e_nodes)
+            Phi_int_cols.extend([i] * len(e_nodes))
+
+        # Set the interface values on the coarse nodes.
+        vertex_idx = np.arange(
+            len(sorted_edges), len(sorted_edges) + len(self.coarse_nodes)
+        )
+        Phi_int_rows.extend(self.coarse_nodes_global_idx)
+        Phi_int_cols.extend(vertex_idx)
+        Phi_int_values = np.ones(len(Phi_int_cols))
+        N_int_components = len(sorted_edges) + len(self.coarse_nodes)
+
+        # Interface basis functions extended by zero to
+        # the interior.
+        Phi_int = csc_matrix(
+            (Phi_int_values, (Phi_int_rows, Phi_int_cols)),
+            shape=(self.m**2, N_int_components),
+        )
+
+        return Phi_int
+
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
+        return np.ones(len(fine_nodes))
