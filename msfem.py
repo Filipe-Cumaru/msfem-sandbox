@@ -318,9 +318,9 @@ class RGDSWCoarseSpace(MSBasisFunction):
         P = csc_matrix((R_values, (row_idx, col_idx)), shape=(self.m**2, N_cells**2))
 
         # The partition of the interior nodes for each subdomain.
-        global_boundary_mask = np.ones((self.m**2, 1)).astype(bool)
-        global_boundary_mask[self.boundary_fine_nodes] = False
-        P_I = P.multiply((P.sum(axis=1) == 1) & global_boundary_mask).tocsc()
+        outside_boundary_mask = np.ones((self.m**2, 1)).astype(bool)
+        outside_boundary_mask[self.boundary_fine_nodes] = False
+        P_I = P.multiply((P.sum(axis=1) == 1) & outside_boundary_mask).tocsc()
 
         # The partition of the nodes on the boundary for each subdomain.
         P_B = P - P_I
