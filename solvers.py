@@ -6,7 +6,7 @@ from scipy.sparse.linalg import spilu, splu, bicgstab, LinearOperator
 def cg(
     A, b, tol=1e-5, maxiter=1000, x0=None, return_lanczos=False, M=None, callback=None
 ):
-    """A conjugate gradiente (CG) linear solver based on
+    """A conjugate gradient (CG) linear solver based on
     algorithms 6.18 and 9.1 from Saad (2003).
 
     Args:
