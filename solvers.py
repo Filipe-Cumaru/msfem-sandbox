@@ -33,6 +33,7 @@ def cg(
     z_curr = M.matvec(r_curr) if M is not None else r_curr.copy()
     p_curr = z_curr.copy() if M is not None else r_curr.copy()
     x_curr = x0.copy() if x0 is not None else np.zeros(len(b))
+    r0_l2 = np.linalg.norm(r_curr)
 
     # An array that stores the values of the CG coefficients.
     # This will be used to assemble Lanczo's tridiagonal matrix.
@@ -52,7 +53,7 @@ def cg(
         if callback is not None:
             callback(x_curr)
 
-        if np.linalg.norm(r_curr) < tol:
+        if (np.linalg.norm(r_curr) / r0_l2) < tol:
             alpha = alpha[: i + 1]
             beta = beta[: i + 1]
             break
