@@ -595,7 +595,7 @@ class GDSWCoarseSpace(RGDSWCoarseSpace):
 
         # Compute the discrete harmonic extension from the
         # interface to the interior.
-        Phi_I = -spsolve(A_II, A_IGamma) @ Phi_Gamma
+        Phi_I = -spsolve(A_II, A_IGamma @ Phi_Gamma)
 
         # Assemble the whole operator.
         Phi = csc_matrix(Phi_int)
