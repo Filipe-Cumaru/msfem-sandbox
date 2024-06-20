@@ -1,6 +1,6 @@
 from scipy.sparse import lil_matrix, csc_matrix, eye, vstack, diags
 from scipy.integrate import quad
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import spsolve, factorized
 from enum import Enum
 import numpy as np
 
@@ -450,17 +450,22 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
 
         A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
 
-        # Compute the initial value of the basis functions on the edges.
-        Phi_e = -spsolve(A_ee, A_ev)
-
+        # Compute the value of the basis functions on the edges.
         # Since the FEM stencil may contain nodes that do not share an
         # edge, the basis function on the edge nodes must be modified
         # to prevent growth outside the support region and preserve the
         # partition of unit.
-        # First, for each coarse node, the edge nodes that are not inside
-        # the support region are filtered.
-        Phi_e_in_edges_mask = self.D[self.edge_nodes, :] > 0
-        Phi_e = Phi_e.multiply(Phi_e_in_edges_mask)
+        solve_with_A_ee_factor = factorized(A_ee)
+        Phi_e_rows, Phi_e_cols, Phi_e_values = [], [], []
+        for n in range(A_ev.shape[1]):
+            # First, for each coarse node, the edge nodes that are not inside
+            # the support region are filtered.
+            in_supp = self.D[self.edge_nodes, n].nonzero()[0]
+            Phi_e_n = -solve_with_A_ee_factor(A_ev[:, n].A.flatten())
+            Phi_e_rows.extend(in_supp)
+            Phi_e_cols.extend([n] * len(in_supp))
+            Phi_e_values.extend(Phi_e_n[in_supp])
+        Phi_e = csc_matrix((Phi_e_values, (Phi_e_rows, Phi_e_cols)), shape=A_ev.shape)
 
         # Next, the partition of unit is reinforced by normalization.
         Phi_e_row_sum = 1 / Phi_e.sum(axis=1).A.flatten()
