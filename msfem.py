@@ -585,23 +585,26 @@ class GDSWCoarseSpace(RGDSWCoarseSpace):
         # Interior nodes
         I = np.setdiff1d(np.arange(self.m**2), Gamma)
 
+        # Permutation indices
+        G = np.hstack((I, Gamma)).argsort()
+
         # Blocks for the discrete harmonic extension.
         A_II = self.A[I[:, None], I]
         A_IGamma = self.A[I[:, None], Gamma]
 
         # Interface basis functions.
-        Phi_int = self._assemble_interface_op()
-        Phi_Gamma = Phi_int[Gamma, :]
+        Phi_Gamma_ext = self._assemble_interface_op()
+        Phi_Gamma = Phi_Gamma_ext[Gamma, :]
 
         # Compute the discrete harmonic extension from the
         # interface to the interior.
         Phi_I = -spsolve(A_II, A_IGamma @ Phi_Gamma)
 
         # Assemble the whole operator.
-        Phi = csc_matrix(Phi_int)
-        Phi[I, :] = Phi_I[:]
+        Phi = vstack((Phi_I, Phi_Gamma), format="csc").T
+        Phi = Phi[:, G]
 
-        return Phi.T
+        return Phi
 
     def _assemble_interface_op(self):
         Phi_int_cols, Phi_int_rows = [], []
