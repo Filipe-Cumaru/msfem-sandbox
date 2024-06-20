@@ -287,6 +287,10 @@ def run_example(
                 )
             cs = msfem.AMSCoarseSpace(N + 1, n + 1, A)
         elif coarse_space == "gdsw":
+            if problem_type is not msfem.NullSpaceType.DIFFUSION:
+                raise ValueError(
+                    "The GDSW coarse space is currently only available for the diffusion problem."
+                )
             cs = msfem.GDSWCoarseSpace(N + 1, n + 1, A, problem_type)
         else:
             raise ValueError("Invalid coarse space.")
