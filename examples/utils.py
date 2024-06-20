@@ -154,7 +154,7 @@ def parse_args(example_description):
         "--precond",
         type=str,
         help="The preconditioning method to be used.",
-        choices=["single-level", "two-level"],
+        choices=["none", "single-level", "two-level"],
         required=True,
     )
     parser.add_argument(
@@ -302,7 +302,11 @@ def run_example(
 
     # Solution of the system of equations using the Schwarz preconditioner.
     print("Solving the system of equations.")
-    M_as = LinearOperator(A.shape, lambda x: precond_op.apply(x))
+    M_as = (
+        LinearOperator(A.shape, lambda x: precond_op.apply(x))
+        if precond != "none"
+        else None
+    )
     it_counter = IterationsCounter(disp=False)
     x = solvers.cg(A, b, M=M_as, callback=it_counter)
 
