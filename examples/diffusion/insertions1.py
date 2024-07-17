@@ -51,7 +51,7 @@ def coeff_fem(msh):
     V = fem.functionspace(msh, ("DG", 0))
     c = fem.Function(V)
     c.x.array[:] = 1
-    c.x.array[Omega_in] = 1e4
+    c.x.array[Omega_in] = 1e8
 
     return c
 
