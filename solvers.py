@@ -25,8 +25,8 @@ def cg(
             It is called as callback(xk), where xk is the current iterate of the solution.
 
     Returns:
-        numpy.ndarray: The converged solution. If `return_lanczos` is set to `True`, then
-        the tridiagonal matrix is also returned.
+        tuple[numpy.ndarray, sparse matrix]: The converged solution.  If `return_lanczos` is set to `True`, then
+        the tridiagonal matrix is also returned. Else, a `None` object is returned.
     """
     # Initialization of the iterative variables.
     r_curr = b - A @ x0 if x0 is not None else b.copy()
@@ -67,9 +67,10 @@ def cg(
             offsets=[-1, 0, 1],
             format="csc",
         )
-        return x_curr, T_m
+    else:
+        T_m = None
 
-    return x_curr
+    return x_curr, T_m
 
 
 def two_stage_ms_solver(
