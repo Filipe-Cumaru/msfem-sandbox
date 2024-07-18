@@ -204,3 +204,7 @@ class TwoLevelASPreconditioner(SingleLevelASPreconditioner):
         y += self.Phi.transpose() @ y_0
 
         return y
+
+    def update_coarse_level(self, Phi_new):
+        self.Phi = Phi_new
+        self.A_0_lu = splu(self.Phi @ (self.A @ self.Phi.transpose()))
