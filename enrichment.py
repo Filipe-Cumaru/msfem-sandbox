@@ -59,7 +59,8 @@ def global_coarse_space_enrichment(
     # Initialize the convergence rates at each enrichment round and
     # the initial random guesses used to compute the new coarse
     # basis functions.
-    conv_rates = [compute_convergence_rate(x0, xk, it_counter.niter)]
+    r0, rk = A @ x0, A @ xk
+    conv_rates = [compute_convergence_rate(r0, rk, it_counter.niter)]
     init_guesses = [x0]
     coarse_space_dim = Phi.shape[0]
 
@@ -72,13 +73,14 @@ def global_coarse_space_enrichment(
     for _ in range(1, max_enrich_rounds + 1):
         # Run the CG iterations to detect the error modes.
         it_counter.niter = 0
-        r0 = np.random.random(num_dofs)
-        rk, _ = cg(A, b0, tol=eps, maxiter=nu, x0=r0, M=M, callback=it_counter)
+        x0 = np.random.random(num_dofs)
+        xk, _ = cg(A, b0, tol=eps, maxiter=nu, x0=x0, M=M, callback=it_counter)
 
+        r0, rk = A @ x0, A @ xk
         gamma_k = compute_convergence_rate(r0, rk, it_counter.niter)
 
         # Filter the relevant error components.
-        agg_mask = rk > (alpha * np.linalg.norm(rk, ord=np.inf))
+        agg_mask = xk > (alpha * np.linalg.norm(xk, ord=np.inf))
         agg_idx = agg_mask.nonzero()[0]
 
         # Aggregate the connected error components by checking their
@@ -88,7 +90,7 @@ def global_coarse_space_enrichment(
 
         # Update the current set of coarse basis functions with the
         # new components.
-        B_row_idx, B_col_idx, B_values = agg_labels[:], agg_idx[:], rk[agg_mask]
+        B_row_idx, B_col_idx, B_values = agg_labels[:], agg_idx[:], xk[agg_mask]
         B = csc_matrix((B_values, (B_row_idx, B_col_idx)), shape=(n_agg, num_dofs))
         Phi_curr = vstack((Phi_prev, B), format="csc")
 
@@ -100,26 +102,29 @@ def global_coarse_space_enrichment(
         # The new coarse operator is considered better if its solution
         # using the initial guesses from previous rounds gives a better
         # convergence rate each time.
-        for j, rj in enumerate(init_guesses):
+        for j, x0_j in enumerate(init_guesses):
             it_counter.niter = 0
-            rj_mod, _ = cg(A, b0, tol=eps, maxiter=nu, x0=rj, M=M, callback=it_counter)
-            gamma_j_mod = compute_convergence_rate(rj, rj_mod, it_counter.niter)
+            xj_mod, _ = cg(
+                A, b0, tol=eps, maxiter=nu, x0=x0_j, M=M, callback=it_counter
+            )
+            r0_j, rk_j_mod = A @ x0_j, A @ xj_mod
+            gamma_j_mod = compute_convergence_rate(r0_j, rk_j_mod, it_counter.niter)
 
             # If the current enrichment round is not an improvement compared
             # to a previous one, then rollback.
-            if gamma_j_mod < conv_rates[j]:
+            if gamma_j_mod > conv_rates[j]:
                 Phi_curr = Phi_prev.copy()
                 precond.update_coarse_level(Phi_curr)
                 break
         else:
             # If the current enrichment round is an improvement, then store
             # its parameters (initial random guess and conv. rate).
-            init_guesses.append(rk)
+            init_guesses.append(x0)
             conv_rates.append(gamma_k)
             Phi_prev = Phi_curr.copy()
             coarse_space_dim = Phi_curr.shape[0]
 
-            # Check if the enrichment satisfies the desireable parameters.
+            # Check if the enrichment satisfies the desirable parameters.
             if conv_rates[-1] >= Gamma or coarse_space_dim >= Lambda:
                 Phi_enriched = Phi_curr
                 break
