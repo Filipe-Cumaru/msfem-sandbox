@@ -131,9 +131,6 @@ class SingleLevelASPreconditioner(object):
             # Compute the overlapping subdomain.
             Omega_i_extended = self._compute_overlap(Omega_i, self.k)
 
-            # Filter the boundary nodes in the subdomain so their value is preserved.
-            Omega_i_extended = np.setdiff1d(Omega_i_extended, self.boundary_nodes)
-
             row_idx.extend(Omega_i_extended)
             col_idx.extend(i * np.ones(len(Omega_i_extended), dtype=int))
 
