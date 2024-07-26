@@ -4,6 +4,7 @@ from scipy.sparse.csgraph import connected_components
 from schwarz import TwoLevelASPreconditioner
 from solvers import cg, IterationsCounter
 import numpy as np
+import warnings
 
 
 def compute_convergence_rate(r0, rk, n):
@@ -122,5 +123,8 @@ def global_coarse_space_enrichment(
             if conv_rates[-1] >= Gamma or coarse_space_dim >= Lambda:
                 Phi_enriched = Phi_curr
                 break
+    else:
+        warnings.warn("Maximum number of enrichment rounds reached.")
+        Phi_enriched = Phi_curr
 
     return Phi_enriched
