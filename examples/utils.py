@@ -18,17 +18,6 @@ import solvers
 np.random.seed(42)
 
 
-class IterationsCounter(object):
-    def __init__(self, disp=True):
-        self._disp = disp
-        self.niter = 0
-
-    def __call__(self, rk=None):
-        self.niter += 1
-        if self._disp:
-            print("iter %3i\trk = %s" % (self.niter, str(rk)))
-
-
 class FEMProblem(object):
     def __init__(self, n: int, coeff: Callable[..., Any], num_dofs: int) -> None:
         self.n = n
@@ -311,7 +300,7 @@ def run_example(
         if precond != "none"
         else None
     )
-    it_counter = IterationsCounter(disp=False)
+    it_counter = solvers.IterationsCounter(disp=False)
     x = solvers.cg(A, b, M=M_as, callback=it_counter)
 
     if output:
