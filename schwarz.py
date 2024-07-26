@@ -140,7 +140,7 @@ class SingleLevelASPreconditioner(object):
         )
 
     def _compute_overlap(self, Omega_i, l):
-        """Computes the overlapping extension of subdomain \Omega_i
+        """Computes the overlapping extension of subdomain \\Omega_i
         into l levels.
 
         Args:
