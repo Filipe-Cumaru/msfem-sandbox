@@ -112,7 +112,7 @@ def global_coarse_space_enrichment(
 
             # If the current enrichment round is not an improvement compared
             # to a previous one, then rollback.
-            if gamma_j_mod > conv_rates[j]:
+            if gamma_j_mod < conv_rates[j]:
                 Phi_curr = Phi_prev.copy()
                 precond.update_coarse_level(Phi_curr)
                 break
