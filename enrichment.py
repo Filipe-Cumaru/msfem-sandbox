@@ -75,9 +75,6 @@ def global_coarse_space_enrichment(
         x0 = np.random.random(num_dofs)
         xk, _ = cg(A, b0, tol=eps, maxiter=nu, x0=x0, M=M, callback=it_counter)
 
-        r0, rk = A @ x0, A @ xk
-        gamma_k = compute_convergence_rate(r0, rk, it_counter.niter)
-
         # Filter the relevant error components.
         agg_mask = np.abs(xk) > (alpha * np.linalg.norm(xk, ord=np.inf))
         agg_idx = agg_mask.nonzero()[0]
@@ -117,7 +114,12 @@ def global_coarse_space_enrichment(
                 break
         else:
             # If the current enrichment round is an improvement, then store
-            # its parameters (initial random guess and conv. rate).
+            # its parameters (initial random guess and convergence rate).
+            it_counter.niter = 0
+            xk, _ = cg(A, b0, tol=eps, maxiter=nu, x0=x0, M=M, callback=it_counter)
+            r0, rk = A @ x0, A @ xk
+            gamma_k = compute_convergence_rate(r0, rk, it_counter.niter)
+
             init_guesses.append(x0)
             conv_rates.append(gamma_k)
             Phi_prev = Phi_curr.copy()
