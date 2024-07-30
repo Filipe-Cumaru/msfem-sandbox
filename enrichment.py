@@ -51,8 +51,7 @@ def global_coarse_space_enrichment(
     precond = TwoLevelASPreconditioner(A, Phi, N, n, k=overlap)
     M = LinearOperator(A.shape, lambda x: precond.apply(x))
 
-    # Run a few CG iterations to get the error map of the initial
-    # OAS preconditioner setup.
+    # Variables used for the CG iterations run to detect error modes.
     num_dofs = A.shape[0]
     it_counter = IterationsCounter(disp=False)
     b0 = np.zeros(num_dofs)
@@ -66,7 +65,7 @@ def global_coarse_space_enrichment(
 
     # Phi_enriched stores the result of each enrichment round and
     # Phi_prev is an auxiliary variable that stores the result of the
-    # last successful enrichment round. Thus if a round fails, we can
+    # last successful enrichment round. Hence, if a round fails, we can
     # rollback to the last sucessful one.
     Phi_prev, Phi_enriched = Phi.copy(), None
 
