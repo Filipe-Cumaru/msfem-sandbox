@@ -43,6 +43,9 @@ def global_coarse_space_enrichment(
     Returns:
         sparse matrix: The enriched version of the prolongation operator.
     """
+    if max_enrich_rounds <= 0:
+        raise ValueError("max_enrich_rounds must be greater than 0.")
+
     # Setup the two-level OAS preconditioner using the initial
     # coarse basis functions.
     precond = TwoLevelASPreconditioner(A, Phi, N, n, k=overlap)
