@@ -55,16 +55,13 @@ def global_coarse_space_enrichment(
     # OAS preconditioner setup.
     num_dofs = A.shape[0]
     it_counter = IterationsCounter(disp=False)
-    x0 = np.random.random(num_dofs)
     b0 = np.zeros(num_dofs)
-    xk, _ = cg(A, b0, tol=eps, maxiter=nu, x0=x0, M=M, callback=it_counter)
 
     # Initialize the convergence rates at each enrichment round and
     # the initial random guesses used to compute the new coarse
     # basis functions.
-    r0, rk = A @ x0, A @ xk
-    conv_rates = [compute_convergence_rate(r0, rk, it_counter.niter)]
-    init_guesses = [x0]
+    conv_rates = []
+    init_guesses = []
     coarse_space_dim = Phi.shape[0]
 
     # Phi_enriched stores the result of each enrichment round and
@@ -73,7 +70,7 @@ def global_coarse_space_enrichment(
     # rollback to the last sucessful one.
     Phi_prev, Phi_enriched = Phi.copy(), None
 
-    for _ in range(1, max_enrich_rounds + 1):
+    for _ in range(max_enrich_rounds):
         # Run the CG iterations to detect the error modes.
         it_counter.niter = 0
         x0 = np.random.random(num_dofs)
