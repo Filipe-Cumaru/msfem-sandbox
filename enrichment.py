@@ -4,7 +4,6 @@ from scipy.sparse.csgraph import connected_components
 from schwarz import TwoLevelASPreconditioner
 from solvers import cg, IterationsCounter
 import numpy as np
-import warnings
 
 
 def compute_convergence_rate(r0, rk, n):
@@ -23,6 +22,7 @@ def global_coarse_space_enrichment(
     N,
     n,
     overlap,
+    verbose=False,
 ):
     """Implementation of the coarse space enrichment procedure proposed by Manea et al. (2016)
     DOI 10.3997/2214-4609.201601894.
@@ -45,6 +45,8 @@ def global_coarse_space_enrichment(
     """
     if max_enrich_rounds <= 0:
         raise ValueError("max_enrich_rounds must be greater than 0.")
+
+    verbose_print = print if verbose else lambda _: None
 
     # Setup the two-level OAS preconditioner using the initial
     # coarse basis functions.
@@ -69,7 +71,10 @@ def global_coarse_space_enrichment(
     # rollback to the last sucessful one.
     Phi_prev, Phi_enriched = Phi.copy(), None
 
-    for _ in range(max_enrich_rounds):
+    for i in range(max_enrich_rounds):
+        verbose_print("---------")
+        verbose_print(f"Enrichment round {i + 1}")
+
         # Run the CG iterations to detect the error modes.
         it_counter.niter = 0
         x0 = np.random.random(num_dofs)
@@ -106,13 +111,18 @@ def global_coarse_space_enrichment(
             r0_j, rk_j_mod = A @ x0_j, A @ xj_mod
             gamma_j_mod = compute_convergence_rate(r0_j, rk_j_mod, it_counter.niter)
 
+            verbose_print(f"Prev. rate = {conv_rates[j]}\tCurr. rate = {gamma_j_mod}")
+
             # If the current enrichment round is not an improvement compared
             # to a previous one, then rollback.
             if gamma_j_mod < conv_rates[j]:
+                verbose_print("Unsuccessful enrichment round \u2716")
                 Phi_curr = Phi_prev.copy()
                 precond.update_coarse_level(Phi_curr)
                 break
         else:
+            verbose_print("Sucessful enrichment round \u2714")
+
             # If the current enrichment round is an improvement, then store
             # its parameters (initial random guess and convergence rate).
             it_counter.niter = 0
@@ -127,10 +137,13 @@ def global_coarse_space_enrichment(
 
             # Check if the enrichment satisfies the desirable parameters.
             if conv_rates[-1] >= Gamma or coarse_space_dim >= Lambda:
+                verbose_print("Convergence achieved \u2714")
                 Phi_enriched = Phi_curr
                 break
     else:
-        warnings.warn("Maximum number of enrichment rounds reached.")
+        verbose_print(
+            "Reached the maximum number of enrichment rounds without convergence."
+        )
         Phi_enriched = Phi_curr
 
     return Phi_enriched
