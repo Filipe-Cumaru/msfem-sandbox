@@ -83,7 +83,7 @@ def global_coarse_space_enrichment(
         gamma_k = compute_convergence_rate(r0, rk, it_counter.niter)
 
         # Filter the relevant error components.
-        agg_mask = xk > (alpha * np.linalg.norm(xk, ord=np.inf))
+        agg_mask = np.abs(xk) > (alpha * np.linalg.norm(xk, ord=np.inf))
         agg_idx = agg_mask.nonzero()[0]
 
         # Aggregate the connected error components by checking their
