@@ -58,11 +58,16 @@ def global_coarse_space_enrichment(
     it_counter = IterationsCounter(disp=False)
     b0 = np.zeros(num_dofs)
 
+    x0 = np.random.rand(num_dofs)
+    xk, _ = cg(A, b0, tol=eps, maxiter=nu, x0=x0, M=M, callback=it_counter)
+    r0, rk = A @ x0, A @ xk
+    gamma_init = compute_convergence_rate(r0, rk, it_counter.niter)
+
     # Initialize the convergence rates at each enrichment round and
     # the initial random guesses used to compute the new coarse
     # basis functions.
-    conv_rates = []
-    init_guesses = []
+    conv_rates = [gamma_init]
+    init_guesses = [x0]
     coarse_space_dim = Phi.shape[0]
 
     # Phi_enriched stores the result of each enrichment round and
