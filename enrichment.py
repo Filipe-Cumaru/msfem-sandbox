@@ -101,7 +101,19 @@ def global_coarse_space_enrichment(
         Phi_curr = vstack((Phi_prev, B), format="csc")
 
         # Update the preconditioner with the new coarse basis functions.
-        precond.update_coarse_level(Phi_curr)
+        try:
+            precond.update_coarse_level(Phi_curr)
+        except RuntimeError as err:
+            # If the new coarse matrix is singular, then the candidate
+            # coarse basis functions are not linearly independent.
+            if err.args[0] == "Factor is exactly singular":
+                verbose_print(
+                    "The updated coarse basis functions are not linearly independent.\nUnsuccessful enrichment round \u2716"
+                )
+                precond.update_coarse_level(Phi_prev)
+                continue
+            else:
+                raise err
 
         # Check if the new set of basis functions is an actual improvement
         # compared to the previous rounds.
@@ -122,8 +134,7 @@ def global_coarse_space_enrichment(
             # to a previous one, then rollback.
             if gamma_j_mod < conv_rates[j]:
                 verbose_print("Unsuccessful enrichment round \u2716")
-                Phi_curr = Phi_prev.copy()
-                precond.update_coarse_level(Phi_curr)
+                precond.update_coarse_level(Phi_prev)
                 break
         else:
             verbose_print("Sucessful enrichment round \u2714")
