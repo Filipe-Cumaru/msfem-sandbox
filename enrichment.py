@@ -110,7 +110,8 @@ def global_coarse_space_enrichment(
                 verbose_print(
                     "The updated coarse basis functions are not linearly independent.\nUnsuccessful enrichment round \u2716"
                 )
-                precond.update_coarse_level(Phi_prev)
+                Phi_curr = Phi_prev.copy()
+                precond.update_coarse_level(Phi_curr)
                 continue
             else:
                 raise err
@@ -134,7 +135,8 @@ def global_coarse_space_enrichment(
             # to a previous one, then rollback.
             if gamma_j_mod < conv_rates[j]:
                 verbose_print("Unsuccessful enrichment round \u2716")
-                precond.update_coarse_level(Phi_prev)
+                Phi_curr = Phi_prev.copy()
+                precond.update_coarse_level(Phi_curr)
                 break
         else:
             verbose_print("Sucessful enrichment round \u2714")
