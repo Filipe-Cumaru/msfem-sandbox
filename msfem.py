@@ -427,26 +427,29 @@ class Q1CoarseSpace(RGDSWCoarseSpace):
 
 
 class AMSCoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A):
-        super().__init__(N, n, A, None)
+    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION):
+        super().__init__(N, n, A, None, null_space_type)
         self.vertex_nodes, self.edge_nodes, self.interior_nodes = (
             self._group_nodes_into_ams_classes()
         )
+        self.vertex_dofs = self.dofs_map[self.vertex_nodes, :].flatten()
+        self.edge_dofs = self.dofs_map[self.edge_nodes, :].flatten()
+        self.interior_dofs = self.dofs_map[self.interior_nodes, :].flatten()
         self.G = np.hstack(
-            (self.interior_nodes, self.edge_nodes, self.vertex_nodes)
+            (self.interior_dofs, self.edge_dofs, self.vertex_dofs)
         ).argsort()
 
     def assemble_operator(self):
         # Split the system matrix into each corresponding block.
-        I_vv = eye(len(self.coarse_nodes), format="csc")
+        I_vv = eye(len(self.coarse_nodes) * self.dofs_map.shape[1], format="csc")
 
-        A_ii = self.A[self.interior_nodes[:, None], self.interior_nodes]
-        A_ie = self.A[self.interior_nodes[:, None], self.edge_nodes]
-        A_iv = self.A[self.interior_nodes[:, None], self.vertex_nodes]
+        A_ii = self.A[self.interior_dofs[:, None], self.interior_dofs]
+        A_ie = self.A[self.interior_dofs[:, None], self.edge_dofs]
+        A_iv = self.A[self.interior_dofs[:, None], self.vertex_dofs]
 
-        A_ee = self.A[self.edge_nodes[:, None], self.edge_nodes]
-        A_ev = self.A[self.edge_nodes[:, None], self.vertex_nodes]
-        A_ei = self.A[self.edge_nodes[:, None], self.interior_nodes]
+        A_ee = self.A[self.edge_dofs[:, None], self.edge_dofs]
+        A_ev = self.A[self.edge_dofs[:, None], self.vertex_dofs]
+        A_ei = self.A[self.edge_dofs[:, None], self.interior_dofs]
 
         A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
 
@@ -455,16 +458,21 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         # edge, the basis function on the edge nodes must be modified
         # to prevent growth outside the support region and preserve the
         # partition of unit.
+        num_dofs = self.dofs_map.shape[1]
         solve_with_A_ee_factor = factorized(A_ee)
         Phi_e_rows, Phi_e_cols, Phi_e_values = [], [], []
         for n in range(A_ev.shape[1]):
             # First, for each coarse node, the edge nodes that are not inside
             # the support region are filtered.
-            in_supp = self.D[self.edge_nodes, n].nonzero()[0]
+            node_idx = n // num_dofs
+            in_supp = self.D[self.edge_nodes, node_idx].nonzero()[0]
+            dofs_in_supp = np.sort(
+                np.concatenate([num_dofs * in_supp + i for i in range(num_dofs)])
+            )
             Phi_e_n = -solve_with_A_ee_factor(A_ev[:, n].A.flatten())
-            Phi_e_rows.extend(in_supp)
-            Phi_e_cols.extend([n] * len(in_supp))
-            Phi_e_values.extend(Phi_e_n[in_supp])
+            Phi_e_rows.extend(dofs_in_supp)
+            Phi_e_cols.extend([n] * len(dofs_in_supp))
+            Phi_e_values.extend(Phi_e_n[dofs_in_supp])
         Phi_e = csc_matrix((Phi_e_values, (Phi_e_rows, Phi_e_cols)), shape=A_ev.shape)
 
         # Next, the partition of unit is reinforced by normalization.
