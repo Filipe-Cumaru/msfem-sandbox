@@ -41,7 +41,7 @@ class FEMProblem(object):
         u, v = ufl.TrialFunction(V), ufl.TestFunction(V)
         a = self._build_bilinear_form(u, v)
         f = fem.Function(V)
-        f.x.array[:] = np.random.rand(len(f.x.array))
+        f.x.array[:] = np.ones(len(f.x.array))
         L = fem.form(ufl.inner(f, v) * ufl.dx)
 
         # Definition of the boundary conditions.
