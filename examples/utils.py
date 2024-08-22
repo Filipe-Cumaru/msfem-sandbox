@@ -270,11 +270,7 @@ def run_example(
                 N + 1, n + 1, A, coeff_eval, slab_size, problem_type
             )
         elif coarse_space == "ams":
-            if problem_type is not msfem.NullSpaceType.DIFFUSION:
-                raise ValueError(
-                    "The AMS coarse space is only available for the diffusion problem."
-                )
-            cs = msfem.AMSCoarseSpace(N + 1, n + 1, A)
+            cs = msfem.AMSCoarseSpace(N + 1, n + 1, A, problem_type)
         elif coarse_space == "gdsw":
             if problem_type is not msfem.NullSpaceType.DIFFUSION:
                 raise ValueError(
