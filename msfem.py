@@ -451,11 +451,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         A_ev = self.A[self.edge_dofs[:, None], self.vertex_dofs]
         A_ei = self.A[self.edge_dofs[:, None], self.interior_dofs]
 
-        if self.null_space_type is NullSpaceType.DIFFUSION:
-            A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
-        else:
-            A_ee = A_ee - A_ei @ spsolve(A_ii, A_ie)
-            A_ev = A_ev - A_ei @ spsolve(A_ii, A_iv)
+        A_ee = A_ee + diags(A_ei.sum(axis=1).A.flatten(), format="csr")
 
         # Compute the value of the basis functions on the edges.
         # Since the FEM stencil may contain nodes that do not share an
