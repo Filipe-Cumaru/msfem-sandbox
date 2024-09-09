@@ -1,4 +1,4 @@
-from scipy.sparse import lil_matrix, csc_matrix, eye, vstack, diags
+from scipy.sparse import lil_matrix, csc_matrix, eye, vstack, diags, block_diag
 from scipy.integrate import quad
 from scipy.sparse.linalg import spsolve, factorized
 from enum import Enum
@@ -523,6 +523,113 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         E_diag[self.edge_nodes] = A_edge_contrast
         E = diags(E_diag, format="csr")
         return E
+
+
+class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
+    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION):
+        super().__init__(N, n, A, None, null_space_type)
+        self.vertex_nodes, self.edge_nodes, self.interior_nodes = (
+            self._group_nodes_into_ams_classes()
+        )
+        self.vertex_dofs = self.dofs_map[self.vertex_nodes, :].flatten()
+        self.edge_dofs = self.dofs_map[self.edge_nodes, :].flatten()
+        self.interior_dofs = self.dofs_map[self.interior_nodes, :].flatten()
+        self.G = np.hstack(
+            (self.interior_dofs, self.edge_dofs, self.vertex_dofs)
+        ).argsort()
+
+    def _compute_interface_pou(self):
+        num_dofs = self.dofs_map.shape[1]
+
+        # Split the system matrix into each corresponding block.
+        I_vv = eye(len(self.coarse_nodes) * self.dofs_map.shape[1], format="csc")
+        A_ev = self.A[self.edge_dofs[:, None], self.vertex_dofs]
+
+        # Remove the coupling between dofs in the blocks A_ee and A_ei.
+        A_ei_sum = np.zeros(self.A.shape[0])
+        A_ee_blocks = []
+        for k in range(num_dofs):
+            interior_dofs_k = self.dofs_map[self.interior_nodes, k]
+            edge_dofs_k = self.dofs_map[self.edge_nodes, k]
+            A_ei_k = self.A[edge_dofs_k[:, None], interior_dofs_k]
+            A_ee_k = self.A[edge_dofs_k[:, None], edge_dofs_k]
+            A_ei_sum[edge_dofs_k] = A_ei_k.sum(axis=1).A.flatten()
+            A_ee_blocks.append(A_ee_k)
+
+        # Reassemble A_ee from its decoupled blocks.
+        edge_dofs_sort = np.argsort(
+            self.dofs_map[self.edge_nodes, :].flatten(order="F")
+        )
+        A_ee = block_diag(A_ee_blocks, format="csc")
+        A_ee = A_ee[edge_dofs_sort[:, None], edge_dofs_sort]
+
+        # Apply the diagonal elimination to A_ee.
+        A_ee = A_ee + diags(A_ei_sum[self.edge_dofs], format="csr")
+
+        # Compute the value of the basis functions on the edges.
+        # Since the FEM stencil may contain nodes that do not share an
+        # edge, the basis function on the edge nodes must be modified
+        # to prevent growth outside the support region and preserve the
+        # partition of unit.
+        solve_with_A_ee_factor = factorized(A_ee)
+        Phi_e_rows, Phi_e_cols, Phi_e_values = [], [], []
+        D = self.D[:, self.coarse_nodes]
+        for n in range(A_ev.shape[1]):
+            # First, for each coarse node, the edge nodes that are not inside
+            # the support region are filtered.
+            node_idx = n // num_dofs
+            nodes_in_supp = D[self.edge_nodes, node_idx].nonzero()[0]
+            dofs_in_supp = self.dofs_map[nodes_in_supp, :].flatten()
+            Phi_e_n = -solve_with_A_ee_factor(A_ev[:, n].A.flatten())
+            Phi_e_rows.extend(dofs_in_supp)
+            Phi_e_cols.extend([n] * len(dofs_in_supp))
+            Phi_e_values.extend(Phi_e_n[dofs_in_supp])
+        Phi_e = csc_matrix((Phi_e_values, (Phi_e_rows, Phi_e_cols)), shape=A_ev.shape)
+
+        # Next, the partition of unit is reinforced by normalization.
+        # The absolute value of the function on the edge is considered
+        # to obtain an interface partition of unit within the interval [0, 1].
+        Phi_e = abs(Phi_e)
+        Phi_e_row_sum = Phi_e.sum(axis=1).A.flatten() ** -1
+        N_ee = diags(Phi_e_row_sum, format="csc")
+        Phi_e = N_ee @ Phi_e
+
+        Phi_i = csc_matrix((len(self.interior_dofs), len(self.vertex_dofs)))
+
+        # Assemble all blocks and sort the operator to the natural order.
+        Phi_wirebasket = vstack((Phi_i, Phi_e, I_vv), format="csc").T
+        Phi = Phi_wirebasket[:, self.G]
+
+        # Extract the interface partition of unit that will be used in
+        # the RGDSW extension.
+        ipou = csc_matrix((self.N**2, self.m**2))
+        coarse_dofs = num_dofs * np.arange(len(self.coarse_nodes), dtype=int)
+        fine_dofs = num_dofs * np.arange(self.m**2, dtype=int)
+        ipou[self.coarse_nodes, :] = Phi[coarse_dofs[:, None], fine_dofs]
+
+        return ipou
+
+    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
+        return np.ones(len(fine_nodes))
+
+    def _group_nodes_into_ams_classes(self):
+        vertex_nodes = self.coarse_nodes_global_idx[:]
+        interface_nodes = np.array(
+            [
+                ni
+                for ni in range(self.m**2)
+                if ((ni % self.m) % (self.n - 1)) == 0
+                or ((ni // self.m) % (self.n - 1)) == 0
+            ]
+        )
+        edge_nodes = np.setdiff1d(
+            np.setdiff1d(interface_nodes, self.boundary_fine_nodes), vertex_nodes
+        )
+        interior_nodes = np.setdiff1d(
+            np.arange(self.m**2, dtype=int),
+            np.union1d(edge_nodes, vertex_nodes),
+        )
+        return vertex_nodes, edge_nodes, interior_nodes
 
 
 class MsFEMSlabCoarseSpace(MsFEMCoarseSpace):
