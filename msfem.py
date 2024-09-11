@@ -515,15 +515,6 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         )
         return vertex_nodes, edge_nodes, interior_nodes
 
-    def _compute_scaling_matrix(self):
-        max_edge_entries = self.A[self.edge_nodes, :].max(axis=1).A.flatten()
-        min_edge_entries = self.A[self.edge_nodes, :].min(axis=1).A.flatten()
-        A_edge_contrast = min_edge_entries / max_edge_entries
-        E_diag = np.ones(self.m**2)
-        E_diag[self.edge_nodes] = A_edge_contrast
-        E = diags(E_diag, format="csr")
-        return E
-
 
 class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
     def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION):
