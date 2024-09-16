@@ -492,7 +492,6 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         # Next, the partition of unit is reinforced by normalization.
         # The absolute value of the function on the edge is considered
         # to obtain an interface partition of unit within the interval [0, 1].
-        Phi_e = abs(Phi_e)
         Phi_e_row_sum = Phi_e.sum(axis=1).A.flatten() ** -1
         N_ee = diags(Phi_e_row_sum, format="csc")
         Phi_e = N_ee @ Phi_e
@@ -597,7 +596,6 @@ class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
         # Next, the partition of unit is reinforced by normalization.
         # The absolute value of the function on the edge is considered
         # to obtain an interface partition of unit within the interval [0, 1].
-        Phi_e = abs(Phi_e)
         Phi_e_row_sum = Phi_e.sum(axis=1).A.flatten() ** -1
         N_ee = diags(Phi_e_row_sum, format="csc")
         Phi_e = N_ee @ Phi_e
