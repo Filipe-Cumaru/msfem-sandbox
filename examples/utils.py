@@ -1,13 +1,10 @@
 from typing import Callable, Any
-from mpi4py import MPI
-from petsc4py import PETSc
-from dolfinx import mesh, fem
-from dolfinx.fem import petsc
-from scipy.sparse import csc_matrix
+from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import LinearOperator
+from netgen.meshing import Mesh, MeshPoint, Pnt, Element1D, Element2D
 
 import numpy as np
-import ufl
+import ngsolve as ngs
 import argparse
 import os
 
@@ -15,72 +12,103 @@ import msfem
 import schwarz
 import solvers
 
-np.random.seed(42)
-
 
 class FEMProblem(object):
-    def __init__(self, n: int, coeff: Callable[..., Any], num_dofs: int) -> None:
+    def __init__(self, n: int, coeff: Any, num_dofs: int) -> None:
         self.n = n
         self.coeff = coeff
         self.num_dofs = num_dofs
-        self.msh = mesh.create_rectangle(
-            MPI.COMM_WORLD,
-            [np.zeros(2), np.ones(2)],
-            [self.n, self.n],
-            mesh.CellType.quadrilateral,
-            ghost_mode=mesh.GhostMode.shared_facet,
-        )
+        self.mesh = self._init_mesh()
+
+    def _init_mesh(self):
+        ngmesh = Mesh(dim=2)
+        point_ids = []
+        for i in range(self.n + 1):
+            for j in range(self.n + 1):
+                point_ids.append(ngmesh.Add(MeshPoint(Pnt(i / self.n, j / self.n, 0))))
+
+        idx_dom = ngmesh.AddRegion("mat", dim=2)
+        for j in range(self.n):
+            for i in range(self.n):
+                ngmesh.Add(
+                    Element2D(
+                        idx_dom,
+                        [
+                            point_ids[i + j * (self.n + 1)],
+                            point_ids[i + (j + 1) * (self.n + 1)],
+                            point_ids[i + 1 + (j + 1) * (self.n + 1)],
+                            point_ids[i + 1 + j * (self.n + 1)],
+                        ],
+                    )
+                )
+
+        for i in range(self.n):
+            ngmesh.Add(
+                Element1D(
+                    [
+                        point_ids[self.n + i * (self.n + 1)],
+                        point_ids[self.n + (i + 1) * (self.n + 1)],
+                    ],
+                    index=1,
+                )
+            )
+            ngmesh.Add(
+                Element1D(
+                    [point_ids[i * (self.n + 1)], point_ids[(i + 1) * (self.n + 1)]],
+                    index=1,
+                )
+            )
+
+        for i in range(self.n):
+            ngmesh.Add(Element1D([point_ids[i], point_ids[i + 1]], index=2))
+            ngmesh.Add(
+                Element1D(
+                    [
+                        point_ids[i + self.n * (self.n + 1)],
+                        point_ids[i + 1 + self.n * (self.n + 1)],
+                    ],
+                    index=2,
+                )
+            )
+
+        return ngs.Mesh(ngmesh)
 
     def _build_bilinear_form(self, u, v):
         raise NotImplementedError()
 
     def assemble(self):
         """Assembles the FEM system of equations."""
-        # Definition of the function space and FEM forms.
-        V = fem.functionspace(self.msh, ("Lagrange", 1, (self.num_dofs,)))
-        u, v = ufl.TrialFunction(V), ufl.TestFunction(V)
+        # Function space and the trial and test functions.
+        fes = ngs.H1(self.mesh, dirichlet=".*")
+        u, v = fes.TrialFunction(), fes.TestFunction()
+
+        # Assemble the weak forms.
         a = self._build_bilinear_form(u, v)
-        f = fem.Function(V)
-        f.x.array[:] = np.ones(len(f.x.array))
-        L = fem.form(ufl.inner(f, v) * ufl.dx)
+        f = ngs.LinearForm(v * ngs.dx).Assemble()
 
-        # Definition of the boundary conditions.
-        facets = mesh.locate_entities_boundary(
-            self.msh,
-            dim=1,
-            marker=lambda x: np.logical_or(
-                np.logical_or(np.isclose(x[0], 0.0), np.isclose(x[1], 0.0)),
-                np.logical_or(np.isclose(x[0], 1.0), np.isclose(x[1], 1.0)),
-            ),
-        )
-        bc = fem.dirichletbc(
-            np.zeros(self.num_dofs, dtype=PETSc.ScalarType),
-            fem.locate_dofs_topological(V, entity_dim=1, entities=facets),
-            V=V,
-        )
+        # Export the assembled system to NumPy/SciPy format.
+        rows, cols, vals = a.mat.COO()
+        A = csr_matrix((vals, (rows, cols)))
+        b = f.vec.FV().NumPy()
 
-        # Assemble the LHS and the RHS.
-        A = petsc.assemble_matrix(a, bcs=[bc])
-        A.assemble()
-        b = petsc.assemble_vector(L)
-        b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
-        petsc.set_bc(b, [bc])
+        # Set boundary conditions.
+        boundary_dofs = np.nonzero(~fes.FreeDofs())[0]
+        msfem.set_sparse_matrix_rows_to_value(A, boundary_dofs, 0)
+        A[boundary_dofs, boundary_dofs] = 1
+        A.eliminate_zeros()
+        b[boundary_dofs] = 0
 
-        # Exports the LHS and RHS to a SciPy friendly format.
-        A_out = csc_matrix(A.getValuesCSR()[::-1], shape=A.size)
-        b_out = b.array[:]
-        grid = self.msh.geometry.x[:, 0:2].T
-
-        return A_out, b_out, grid
+        return A, b
 
 
 class DiffusionFEMProblem(FEMProblem):
-    def __init__(self, n: int, coeff: Callable[..., Any]) -> None:
+    def __init__(self, n: int, coeff: Any) -> None:
         super().__init__(n, coeff, num_dofs=1)
 
     def _build_bilinear_form(self, u, v):
-        C = self.coeff(self.msh)
-        return fem.form(ufl.inner(C * ufl.grad(u), ufl.grad(v)) * ufl.dx)
+        return ngs.BilinearForm(
+            self.coeff * ngs.grad(u) * ngs.grad(v) * ngs.dx
+        ).Assemble()
 
 
 class LinearElasticityFEMProblem(FEMProblem):
