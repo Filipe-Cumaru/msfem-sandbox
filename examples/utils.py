@@ -78,7 +78,7 @@ class FEMProblem(object):
 
     def _build_bilinear_form(self, u, v):
         raise NotImplementedError()
-    
+
     def _build_linear_form(self, v):
         raise NotImplementedError()
 
@@ -135,7 +135,7 @@ class LinearElasticityFEMProblem(FEMProblem):
         return ngs.BilinearForm(
             ngs.InnerProduct(sigma, eps_v).Compile() * ngs.dx
         ).Assemble()
-    
+
     def _build_linear_form(self, v):
         force = ngs.CF((1, 1))
         return ngs.LinearForm(force * v * ngs.dx).Assemble()
