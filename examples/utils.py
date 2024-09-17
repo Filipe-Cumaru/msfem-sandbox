@@ -266,19 +266,17 @@ def run_example(
             "The problem type must be either diffusion or linear elasticity."
         )
 
-    # Assembly of the FE system of equations.
-    A, b, grid = fem_problem.assemble()
-    print("===> Done ✔.")
+    # Assemble the FE system of equations.
+    A, b = fem_problem.assemble()
 
-    # Reordering of the system so it is consistent with the
-    # definition adopted in the coarse space.
-    idx = np.lexsort((grid[0], grid[1]))
-    for i in range(dofs_map.shape[1]):
-        dofs_map[:, i] = dofs_map[idx, i]
-    dofs_idx = dofs_map.flatten()
-    A = A[:, dofs_idx]
-    A = A[dofs_idx, :]
-    b = b[dofs_idx]
+    # A mapping of the grid nodes to their respective dofs.
+    node_ids = np.arange(m**2)
+    ngs_dofs_map = np.array([node_ids + i * m**2 for i in range(num_dofs_per_node)]).T
+    A = A[ngs_dofs_map.flatten(), :]
+    A = A[:, ngs_dofs_map.flatten()] # type: ignore
+    b = b[ngs_dofs_map.flatten()]
+
+    print("===> Done ✔.")
 
     if precond == "single-level":
         print("Initializing the preconditioner.")
