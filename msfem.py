@@ -163,7 +163,9 @@ class RGDSWCoarseSpace(MSBasisFunction):
 
                 # The contribution of the interface POU to the subdomain
                 # \Omega_i (c.f. Eq. 3 from Dohrmann and Windlund (2017)).
-                Psi_ic_Nc = interface_pou[c, Ni_c].A.flatten()[:, None] * null_space
+                Psi_ic_Nc = (
+                    interface_pou[c, Ni_c].toarray().flatten()[:, None] * null_space
+                )
                 Psi_ic = csc_matrix(
                     (
                         Psi_ic_Nc.flatten(),
@@ -219,7 +221,7 @@ class RGDSWCoarseSpace(MSBasisFunction):
         ipou_values = []
 
         for nc in self.coarse_nodes:
-            inv_dist_to_nc = self.D[:, nc].A.flatten()
+            inv_dist_to_nc = self.D[:, nc].toarray().flatten()
             supp_nodes = np.where(inv_dist_to_nc != 0)[0]
             inv_dist_sum = self.D[supp_nodes, :].sum(axis=1).A.flatten()
             ipou_values.extend(inv_dist_to_nc[supp_nodes] / inv_dist_sum)
@@ -483,7 +485,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
             node_idx = n // num_dofs
             nodes_in_supp = self.D[self.edge_nodes, node_idx].nonzero()[0]
             dofs_in_supp = self.dofs_map[nodes_in_supp, :].flatten()
-            Phi_e_n = -solve_with_A_ee_factor(A_ev[:, n].A.flatten())
+            Phi_e_n = -solve_with_A_ee_factor(A_ev[:, n].toarray().flatten())
             Phi_e_rows.extend(dofs_in_supp)
             Phi_e_cols.extend([n] * len(dofs_in_supp))
             Phi_e_values.extend(Phi_e_n[dofs_in_supp])
