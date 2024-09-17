@@ -112,39 +112,30 @@ class DiffusionFEMProblem(FEMProblem):
 
 
 class LinearElasticityFEMProblem(FEMProblem):
-    def __init__(self, n: int, coeff: Callable[..., Any]) -> None:
+    def __init__(self, n: int, coeff: Any) -> None:
         super().__init__(n, coeff, num_dofs=2)
 
+    def _init_fes(self):
+        return ngs.VectorH1(self.mesh, dirichlet=".*")
+
     def _build_bilinear_form(self, u, v):
-        return fem.form(ufl.inner(self._sigma(u), self._sym_grad(v)) * ufl.dx)
+        eps_u, eps_v = self._strain(u), self._strain(v)
+        sigma = self._stress(eps_u)
+        return ngs.BilinearForm(
+            ngs.InnerProduct(sigma, eps_v).Compile() * ngs.dx
+        ).Assemble()
+    
+    def _build_linear_form(self, v):
+        force = ngs.CF((1, 1))
+        return ngs.LinearForm(force * v * ngs.dx).Assemble()
 
-    def _sym_grad(self, v):
-        return ufl.sym(ufl.grad(v))
+    def _strain(self, u):
+        return ngs.Sym(ngs.Grad(u))
 
-    def _strain2voigt(self, e):
-        return ufl.as_vector([e[0, 0], e[1, 1], 2 * e[0, 1]])
-
-    def _voigt2stress(self, s):
-        return ufl.as_tensor([[s[0], s[2]], [s[2], s[1]]])
-
-    def _sigma(self, u):
-        # Young's moduli and Poisson ratio
-        E, Nu = self.coeff(self.msh)
-        E_x, E_y = E[0], E[1]
-
-        # Shear modulus
-        G_xy = E_x * E_y / (E_x + E_y + 2 * E_y * Nu)
-
-        # Stiffness tensor
-        C = ufl.as_matrix(
-            [
-                [E_x / (1 - Nu**2), Nu * E_x / (1 - Nu**2), 0],
-                [Nu * E_x / (1 - Nu**2), E_y / (1 - Nu**2), 0],
-                [0, 0, G_xy],
-            ]
-        )
-
-        return self._voigt2stress(ufl.dot(C, self._strain2voigt(self._sym_grad(u))))
+    def _stress(self, strain):
+        E, nu = self.coeff(self.mesh)
+        mu, lam = E / (2 * (1 + nu)), E * nu / ((1 + nu) * (1 - 2 * nu))
+        return 2 * mu * strain + lam * ngs.Trace(strain) * ngs.Id(strain.shape[0])
 
 
 def parse_args(example_description):
