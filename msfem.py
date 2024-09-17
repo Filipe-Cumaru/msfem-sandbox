@@ -429,8 +429,8 @@ class Q1CoarseSpace(RGDSWCoarseSpace):
 
 
 class AMSCoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION):
-        super().__init__(N, n, A, None, null_space_type)
+    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
+        super().__init__(N, n, A, None, null_space_type, dofs_map)
         self.vertex_nodes, self.edge_nodes, self.interior_nodes = (
             self._group_nodes_into_ams_classes()
         )
@@ -535,8 +535,8 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
 
 
 class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION):
-        super().__init__(N, n, A, None, null_space_type)
+    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
+        super().__init__(N, n, A, None, null_space_type, dofs_map)
         self.vertex_nodes, self.edge_nodes, self.interior_nodes = (
             self._group_nodes_into_ams_classes()
         )
