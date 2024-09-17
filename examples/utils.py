@@ -73,18 +73,24 @@ class FEMProblem(object):
 
         return ngs.Mesh(ngmesh)
 
+    def _init_fes(self):
+        raise NotImplementedError()
+
     def _build_bilinear_form(self, u, v):
+        raise NotImplementedError()
+    
+    def _build_linear_form(self, v):
         raise NotImplementedError()
 
     def assemble(self):
         """Assembles the FEM system of equations."""
         # Function space and the trial and test functions.
-        fes = ngs.H1(self.mesh, dirichlet=".*")
+        fes = self._init_fes()
         u, v = fes.TrialFunction(), fes.TestFunction()
 
         # Assemble the weak forms.
         a = self._build_bilinear_form(u, v)
-        f = ngs.LinearForm(v * ngs.dx).Assemble()
+        f = self._build_linear_form(v)
 
         # Export the assembled system to NumPy/SciPy format.
         rows, cols, vals = a.mat.COO()
@@ -105,10 +111,15 @@ class DiffusionFEMProblem(FEMProblem):
     def __init__(self, n: int, coeff: Any) -> None:
         super().__init__(n, coeff, num_dofs=1)
 
+    def _init_fes(self):
+        return ngs.H1(self.mesh, dirichlet=".*")
+
     def _build_bilinear_form(self, u, v):
-        return ngs.BilinearForm(
-            self.coeff * ngs.grad(u) * ngs.grad(v) * ngs.dx
-        ).Assemble()
+        c = self.coeff(self.mesh)
+        return ngs.BilinearForm(c * ngs.grad(u) * ngs.grad(v) * ngs.dx).Assemble()
+
+    def _build_linear_form(self, v):
+        return ngs.LinearForm(v * ngs.dx).Assemble()
 
 
 class LinearElasticityFEMProblem(FEMProblem):
