@@ -250,21 +250,20 @@ def run_example(
     # Number of nodes on each direction (m x m grid).
     m = N * n + 1
 
-    # Initialization of the local dof map according to the type of problem.
     print("Assembling the FE problem.")
-    if problem_type is msfem.NullSpaceType.DIFFUSION:
-        fem_problem = DiffusionFEMProblem(m - 1, coeff_fem)
-        dofs_map = np.arange(m**2, dtype=int).reshape((m**2, 1))
-    elif problem_type is msfem.NullSpaceType.LINEAR_ELASTICITY:
-        fem_problem = LinearElasticityFEMProblem(m - 1, coeff_fem)
-        ns = np.arange(m**2, dtype=int)
-        dofs_map = np.zeros((m**2, 2), dtype=int)
-        dofs_map[:, 0] = 2 * ns
-        dofs_map[:, 1] = 2 * ns + 1
-    else:
-        raise ValueError(
-            "The problem type must be either diffusion or linear elasticity."
-        )
+
+    # Initialization of an instance of a FEM problem.
+    match problem_type:
+        case msfem.NullSpaceType.DIFFUSION:
+            fem_problem = DiffusionFEMProblem(m - 1, coeff_fem)
+            num_dofs_per_node = 1
+        case msfem.NullSpaceType.LINEAR_ELASTICITY:
+            fem_problem = LinearElasticityFEMProblem(m - 1, coeff_fem)
+            num_dofs_per_node = 2
+        case _:
+            raise ValueError(
+                "The problem type must be either diffusion or linear elasticity."
+            )
 
     # Assemble the FE system of equations.
     A, b = fem_problem.assemble()
@@ -285,28 +284,31 @@ def run_example(
     elif precond == "two-level":
         # Initialization of the coarse space.
         print("Initializing the coarse space.")
-        if coarse_space == "msfem":
-            cs = msfem.MsFEMCoarseSpace(N + 1, n + 1, A, coeff_eval, problem_type)
-        elif coarse_space == "q1":
-            cs = msfem.Q1CoarseSpace(N + 1, n + 1, A, problem_type)
-        elif coarse_space == "rgdsw-opt-1":
-            cs = msfem.RGDSWConstantCoarseSpace(N + 1, n + 1, A, problem_type)
-        elif coarse_space == "rgdsw-opt-2-2":
-            cs = msfem.RGDSWInverseDistanceCoarseSpace(N + 1, n + 1, A, problem_type)
-        elif coarse_space == "slab-msfem":
-            cs = msfem.MsFEMSlabCoarseSpace(
-                N + 1, n + 1, A, coeff_eval, slab_size, problem_type
-            )
-        elif coarse_space == "ams":
-            cs = msfem.AMSCoarseSpace(N + 1, n + 1, A, problem_type)
-        elif coarse_space == "gdsw":
-            if problem_type is not msfem.NullSpaceType.DIFFUSION:
-                raise ValueError(
-                    "The GDSW coarse space is currently only available for the diffusion problem."
+        match coarse_space:
+            case "msfem":
+                cs = msfem.MsFEMCoarseSpace(N + 1, n + 1, A, coeff_eval, problem_type)
+            case "q1":
+                cs = msfem.Q1CoarseSpace(N + 1, n + 1, A, problem_type)
+            case "rgdsw-opt-1":
+                cs = msfem.RGDSWConstantCoarseSpace(N + 1, n + 1, A, problem_type)
+            case "rgdsw-opt-2-2":
+                cs = msfem.RGDSWInverseDistanceCoarseSpace(
+                    N + 1, n + 1, A, problem_type
                 )
-            cs = msfem.GDSWCoarseSpace(N + 1, n + 1, A, problem_type)
-        else:
-            raise ValueError("Invalid coarse space.")
+            case "slab-msfem":
+                cs = msfem.MsFEMSlabCoarseSpace(
+                    N + 1, n + 1, A, coeff_eval, slab_size, problem_type
+                )
+            case "ams":
+                cs = msfem.AMSCoarseSpace(N + 1, n + 1, A, problem_type)
+            case "gdsw":
+                if problem_type is not msfem.NullSpaceType.DIFFUSION:
+                    raise ValueError(
+                        "The GDSW coarse space is currently only available for the diffusion problem."
+                    )
+                cs = msfem.GDSWCoarseSpace(N + 1, n + 1, A, problem_type)
+            case _:
+                raise ValueError("Invalid coarse space.")
 
         # Computes the coarse interpolation operator equiv. to
         # the multiscale prolongation operator.
