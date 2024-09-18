@@ -1,4 +1,5 @@
 from typing import Callable, Any
+from scipy.io import savemat
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import LinearOperator
 from netgen.meshing import Mesh, MeshPoint, Pnt, Element1D, Element2D
@@ -272,7 +273,7 @@ def run_example(
     node_ids = np.arange(m**2)
     ngs_dofs_map = np.array([node_ids + i * m**2 for i in range(num_dofs_per_node)]).T
     A = A[ngs_dofs_map.flatten(), :]
-    A = A[:, ngs_dofs_map.flatten()] # type: ignore
+    A = A[:, ngs_dofs_map.flatten()]  # type: ignore
     b = b[ngs_dofs_map.flatten()]
 
     print("===> Done ✔.")
@@ -327,17 +328,24 @@ def run_example(
         else None
     )
     it_counter = solvers.IterationsCounter(disp=False)
-    x = solvers.cg(A, b, M=M_as, callback=it_counter)
+    x, Tn = solvers.cg(
+        A, b, M=M_as, tol=1e-8, maxiter=1000, callback=it_counter, return_lanczos=True
+    )
 
     if output:
         if not os.path.exists("./output"):
             os.mkdir("./output")
         fname = (
-            f"solution_{m-1}x{m-1}_{N}x{N}_{precond}"
+            f"output_{m-1}x{m-1}_{N}x{N}_{precond}"
             + (f"_{coarse_space}" if precond == "two-level" else "")
-            + ".npy"
+            + ".mat"
         )
-        np.save(f"./output/{fname}", x)
+        out_dict = {"A": A, "b": b, "Tn": Tn, "x": x}
+
+        if precond == "two-level":
+            out_dict["Phi"] = Phi
+
+        savemat(f"./output/{fname}", out_dict)
 
     print(f"Number of iterations: {it_counter.niter}")
     print("===> Done ✔.")
