@@ -2,7 +2,7 @@ from typing import Callable, Any
 from scipy.io import savemat
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import LinearOperator
-from netgen.meshing import Mesh, MeshPoint, Pnt, Element1D, Element2D
+from ngsolve.meshes import MakeQuadMesh
 
 import numpy as np
 import ngsolve as ngs
@@ -19,60 +19,7 @@ class FEMProblem(object):
         self.n = n
         self.coeff = coeff
         self.num_dofs = num_dofs
-        self.mesh = self._init_mesh()
-
-    def _init_mesh(self):
-        ngmesh = Mesh(dim=2)
-        point_ids = []
-        for i in range(self.n + 1):
-            for j in range(self.n + 1):
-                point_ids.append(ngmesh.Add(MeshPoint(Pnt(i / self.n, j / self.n, 0))))
-
-        idx_dom = ngmesh.AddRegion("mat", dim=2)
-        for j in range(self.n):
-            for i in range(self.n):
-                ngmesh.Add(
-                    Element2D(
-                        idx_dom,
-                        [
-                            point_ids[i + j * (self.n + 1)],
-                            point_ids[i + (j + 1) * (self.n + 1)],
-                            point_ids[i + 1 + (j + 1) * (self.n + 1)],
-                            point_ids[i + 1 + j * (self.n + 1)],
-                        ],
-                    )
-                )
-
-        for i in range(self.n):
-            ngmesh.Add(
-                Element1D(
-                    [
-                        point_ids[self.n + i * (self.n + 1)],
-                        point_ids[self.n + (i + 1) * (self.n + 1)],
-                    ],
-                    index=1,
-                )
-            )
-            ngmesh.Add(
-                Element1D(
-                    [point_ids[i * (self.n + 1)], point_ids[(i + 1) * (self.n + 1)]],
-                    index=1,
-                )
-            )
-
-        for i in range(self.n):
-            ngmesh.Add(Element1D([point_ids[i], point_ids[i + 1]], index=2))
-            ngmesh.Add(
-                Element1D(
-                    [
-                        point_ids[i + self.n * (self.n + 1)],
-                        point_ids[i + 1 + self.n * (self.n + 1)],
-                    ],
-                    index=2,
-                )
-            )
-
-        return ngs.Mesh(ngmesh)
+        self.mesh = MakeQuadMesh(nx=n, ny=n)
 
     def _init_fes(self):
         raise NotImplementedError()
