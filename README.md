@@ -6,9 +6,7 @@ A collection of coarse spaces for the two-level additive Schwarz preconditioner 
 
 ### Dependencies
 
-This project depends on [DOLFINx](https://github.com/FEniCS/dolfinx#installation) in order to assemble the finite-element problem.
-
-The remaining Python dependencies can be installed via:
+This project uses [Netgen/NGSolve](https://ngsolve.org/) in order to assemble the finite-element problem. It and all the remaining Python dependencies can be installed via:
 ```
 pip install -r requirements.txt
 ```
