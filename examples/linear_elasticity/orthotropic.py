@@ -1,39 +1,8 @@
 import numpy as np
-from dolfinx import fem, mesh
+import ngsolve as ngs
 from ..utils import run_example, parse_args, msfem
 
 N, n = 0, 0
-
-
-def find_insertions(x, horizontal=False, vertical=False):
-    global N, n
-    m = N * n
-    h = 1 / m
-    margin = h
-    xcs, ycs = np.meshgrid(np.linspace(0, 1, N + 1), np.linspace(0, 1, N + 1))
-    xcs, ycs = xcs.flatten(), ycs.flatten()
-    mask = (xcs > 0) & (xcs < 1) & (ycs > 0) & (ycs < 1)
-    xcs, ycs = xcs[mask], ycs[mask]
-    xs, ys = x[0], x[1]
-
-    in_mask = np.zeros(len(xs), dtype=bool)
-    for xc, yc in zip(xcs, ycs):
-        if horizontal:
-            horizontal_check = (
-                np.isclose(np.abs(xc - xs), (2 * margin))
-                | (np.abs(xc - xs) < (2 * margin))
-            ) & (np.isclose(np.abs(yc - ys), margin) | (np.abs(yc - ys) < margin))
-            in_mask = in_mask | horizontal_check
-        if vertical:
-            vertical_check = (
-                np.isclose(np.abs(xc - xs), margin) | (np.abs(xc - xs) < margin)
-            ) & (
-                np.isclose(np.abs(yc - ys), (2 * margin))
-                | (np.abs(yc - ys) < (2 * margin))
-            )
-            in_mask = in_mask | vertical_check
-
-    return in_mask
 
 
 def coeff_eval(x, y):
@@ -67,26 +36,29 @@ def coeff_eval(x, y):
     return coeff
 
 
-def coeff_fem(msh):
+def coeff_fem():
     global N, n
-
-    Omega_h = mesh.locate_entities(
-        msh, msh.topology.dim, lambda x: find_insertions(x, horizontal=True)
-    )
-    Omega_v = mesh.locate_entities(
-        msh, msh.topology.dim, lambda x: find_insertions(x, vertical=True)
-    )
-    Omega_int = np.intersect1d(Omega_h, Omega_v)
-
-    V = fem.functionspace(msh, ("DG", 0, (msh.geometry.dim,)))
-    E = fem.Function(V, name="E")
-    E.x.array[:] = 1
-    E.x.array[2 * Omega_h] = 1e4
-    E.x.array[2 * Omega_v + 1] = 1e4
-    E.x.array[2 * Omega_int] = E.x.array[2 * Omega_int + 1] = 1e4
-    Nu = 0.3
-
-    return E, Nu
+    Ex, Ey, Nu = 0, 0, 0.3
+    H, h = 1 / N, 1 / (N * n)
+    l, w = 4 * h, 2 * h
+    for i in range(1, N):
+        for j in range(1, N):
+            ox, oy = i * H, j * H
+            Ex += ngs.IfPos(
+                ngs.sqrt(((ngs.x - ox) / l + (ngs.y - oy) / w) ** 2)
+                + ngs.sqrt(((ngs.x - ox) / l - (ngs.y - oy) / w) ** 2)
+                - 1,
+                (N - 1) ** (-2),
+                1e4,
+            )
+            Ey += ngs.IfPos(
+                ngs.sqrt(((ngs.x - ox) / w + (ngs.y - oy) / l) ** 2)
+                + ngs.sqrt(((ngs.x - ox) / w - (ngs.y - oy) / l) ** 2)
+                - 1,
+                (N - 1) ** (-2),
+                1e4,
+            )
+    return Ex, Ey, Nu
 
 
 def main(args):

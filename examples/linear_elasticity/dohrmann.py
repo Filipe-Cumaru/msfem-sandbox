@@ -8,7 +8,7 @@ def coeff_eval(x, y):
 
 
 def coeff_fem():
-    return 1.0, 0.3
+    return 1.0, 1.0, 0.3
 
 
 def main(args):

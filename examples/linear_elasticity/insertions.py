@@ -41,7 +41,7 @@ def coeff_fem():
                 (N - 1) ** (-2),
                 1e4,
             )
-    return E, Nu
+    return E, E, Nu
 
 
 def main(args):
