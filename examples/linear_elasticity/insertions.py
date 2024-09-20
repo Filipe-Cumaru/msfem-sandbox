@@ -1,29 +1,8 @@
 import numpy as np
-from dolfinx import fem, mesh
+import ngsolve as ngs
 from ..utils import run_example, parse_args, msfem
 
 N, n = 0, 0
-
-
-def find_insertions(x):
-    global N, n
-    m = N * n
-    h = 1 / m
-    margin = 2 * h
-    xcs, ycs = np.meshgrid(np.linspace(0, 1, N + 1), np.linspace(0, 1, N + 1))
-    xcs, ycs = xcs.flatten(), ycs.flatten()
-    mask = (xcs > 0) & (xcs < 1) & (ycs > 0) & (ycs < 1)
-    xcs, ycs = xcs[mask], ycs[mask]
-    xs, ys = x[0], x[1]
-
-    in_mask = np.zeros(len(xs), dtype=bool)
-    for xc, yc in zip(xcs, ycs):
-        coarse_node_check = (
-            np.isclose(np.abs(xc - xs), margin) | (np.abs(xc - xs) < margin)
-        ) & (np.isclose(np.abs(yc - ys), margin) | (np.abs(yc - ys) < margin))
-        in_mask = in_mask | coarse_node_check
-
-    return in_mask
 
 
 def coeff_eval(x, y):
@@ -47,17 +26,21 @@ def coeff_eval(x, y):
     return Lambda1 if np.any(coarse_node_check) else Lambda2
 
 
-def coeff_fem(msh):
+def coeff_fem():
     global N, n
-
-    Omega_in = mesh.locate_entities(msh, msh.topology.dim, find_insertions)
-
-    V = fem.functionspace(msh, ("DG", 0, (msh.geometry.dim,)))
-    E = fem.Function(V, name="E")
-    E.x.array[:] = 1
-    E.x.array[2 * Omega_in] = E.x.array[2 * Omega_in + 1] = 1e4
-    Nu = 0.3
-
+    E, Nu = 0, 0.3
+    H, h = 1 / N, 1 / (N * n)
+    l = 4 * h
+    for i in range(1, N):
+        for j in range(1, N):
+            ox, oy = i * H, j * H
+            E += ngs.IfPos(
+                ngs.sqrt((ngs.x - ox + ngs.y - oy) ** 2)
+                + ngs.sqrt((ngs.x - ox - ngs.y + oy) ** 2)
+                - l,
+                (N - 1) ** (-2),
+                1e4,
+            )
     return E, Nu
 
 

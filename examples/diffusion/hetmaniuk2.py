@@ -1,5 +1,5 @@
 import numpy as np
-import ufl
+import ngsolve as ngs
 from ..utils import run_example, parse_args, msfem
 
 
@@ -7,9 +7,8 @@ def coeff_eval(x, y):
     return 1 / (1.2 + np.cos(32 * np.pi * x * (1 - x) * y * (1 - y)))
 
 
-def coeff_fem(msh):
-    x = ufl.SpatialCoordinate(msh)
-    c = (1.2 + ufl.cos(32 * ufl.pi * x[0] * (1 - x[0]) * x[1] * (1 - x[1]))) ** -1
+def coeff_fem():
+    c = (1.2 + ngs.cos(32 * ngs.pi * ngs.x * (1 - ngs.x) * ngs.y * (1 - ngs.y))) ** -1
     return c
 
 
@@ -30,7 +29,7 @@ def main(args):
         coeff_fem,
         coeff_eval,
         problem_type=msfem.NullSpaceType.DIFFUSION,
-        output=args.output
+        output=args.output,
     )
 
 

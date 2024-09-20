@@ -63,7 +63,7 @@ class DiffusionFEMProblem(FEMProblem):
         return ngs.H1(self.mesh, dirichlet=".*")
 
     def _build_bilinear_form(self, u, v):
-        c = self.coeff(self.mesh)
+        c = self.coeff()
         return ngs.BilinearForm(c * ngs.grad(u) * ngs.grad(v) * ngs.dx).Assemble()
 
     def _build_linear_form(self, v):
@@ -92,7 +92,7 @@ class LinearElasticityFEMProblem(FEMProblem):
         return ngs.Sym(ngs.Grad(u))
 
     def _stress(self, strain):
-        E, nu = self.coeff(self.mesh)
+        E, nu = self.coeff()
         mu, lam = E / (2 * (1 + nu)), E * nu / ((1 + nu) * (1 - 2 * nu))
         return 2 * mu * strain + lam * ngs.Trace(strain) * ngs.Id(strain.shape[0])
 

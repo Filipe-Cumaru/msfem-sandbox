@@ -7,8 +7,8 @@ def coeff_eval(x, y):
     return Lambda
 
 
-def coeff_fem(_):
-    return [1.0, 1.0], 0.3
+def coeff_fem():
+    return 1.0, 0.3
 
 
 def main(args):

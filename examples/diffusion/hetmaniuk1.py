@@ -5,7 +5,7 @@ def coeff_eval(x, y):
     return 1
 
 
-def coeff_fem(_):
+def coeff_fem():
     return 1
 
 
