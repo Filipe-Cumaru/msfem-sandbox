@@ -48,6 +48,7 @@ class FEMProblem(object):
         # Set boundary conditions.
         boundary_dofs = np.nonzero(~fes.FreeDofs())[0]
         msfem.set_sparse_matrix_rows_to_value(A, boundary_dofs, 0)
+        A[:, boundary_dofs] *= 0  # type: ignore
         A[boundary_dofs, boundary_dofs] = 1
         A.eliminate_zeros()
         b[boundary_dofs] = 0
@@ -100,7 +101,7 @@ class LinearElasticityFEMProblem(FEMProblem):
                 (nu * Ex / (1 - nu**2), Ey / (1 - nu**2), 0),
                 (0, 0, Gxy),
             ),
-            dims=(3, 3)
+            dims=(3, 3),
         )
         return self._voigt2stress(C * self._strain2voigt(strain))
 
