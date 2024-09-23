@@ -1,6 +1,6 @@
 from typing import Callable, Any
 from scipy.io import savemat
-from scipy.sparse import csr_matrix
+from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import LinearOperator
 from ngsolve.meshes import MakeQuadMesh
 
@@ -42,12 +42,12 @@ class FEMProblem(object):
 
         # Export the assembled system to NumPy/SciPy format.
         rows, cols, vals = a.mat.COO()
-        A = csr_matrix((vals, (rows, cols)))
+        A = coo_matrix((vals, (rows, cols))).tocsc()
         b = f.vec.FV().NumPy()
 
         # Set boundary conditions.
         boundary_dofs = np.nonzero(~fes.FreeDofs())[0]
-        msfem.set_sparse_matrix_rows_to_value(A, boundary_dofs, 0)
+        A[boundary_dofs, :] *= 0  # type: ignore
         A[:, boundary_dofs] *= 0  # type: ignore
         A[boundary_dofs, boundary_dofs] = 1
         A.eliminate_zeros()
