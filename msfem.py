@@ -589,7 +589,7 @@ class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
             node_idx = n // num_dofs
             nodes_in_supp = D[self.edge_nodes, node_idx].nonzero()[0]
             dofs_in_supp = self.dofs_map[nodes_in_supp, :].flatten()
-            Phi_e_n = -solve_with_A_ee_factor(A_ev[:, n].A.flatten())
+            Phi_e_n = -solve_with_A_ee_factor(A_ev[:, n].toarray().flatten())
             Phi_e_rows.extend(dofs_in_supp)
             Phi_e_cols.extend([n] * len(dofs_in_supp))
             Phi_e_values.extend(Phi_e_n[dofs_in_supp])
