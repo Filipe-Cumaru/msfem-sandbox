@@ -93,17 +93,20 @@ class LinearElasticityFEMProblem(FEMProblem):
         return ngs.Sym(ngs.Grad(u))
 
     def _stress(self, strain):
-        Ex, Ey, nu = self.coeff()
-        Gxy = Ex * Ey / (Ex + Ey + 2 * Ey * nu)
-        C = ngs.CF(
-            (
-                (Ex / (1 - nu**2), nu * Ex / (1 - nu**2), 0),
-                (nu * Ex / (1 - nu**2), Ey / (1 - nu**2), 0),
-                (0, 0, Gxy),
-            ),
-            dims=(3, 3),
-        )
-        return self._voigt2stress(C * self._strain2voigt(strain))
+        # Ex, Ey, nu = self.coeff()
+        # Gxy = Ex * Ey / (Ex + Ey + 2 * Ey * nu)
+        # C = ngs.CF(
+        #     (
+        #         (Ex / (1 - nu**2), nu * Ex / (1 - nu**2), 0),
+        #         (nu * Ex / (1 - nu**2), Ey / (1 - nu**2), 0),
+        #         (0, 0, Gxy),
+        #     ),
+        #     dims=(3, 3),
+        # )
+        # return self._voigt2stress(C * self._strain2voigt(strain))
+        E, _, nu = self.coeff()
+        Lambda, Mu = E * nu / ((1 + nu) * (1 - 2 * nu)), E / (2 * (1 + nu))
+        return Lambda * ngs.Trace(strain) * ngs.Id(2) + 2 * Mu * strain
 
     def _strain2voigt(self, e):
         return ngs.CF((e[0, 0], e[1, 1], 2 * e[0, 1]))
