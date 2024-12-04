@@ -4,8 +4,8 @@ from scipy.sparse.linalg import splu
 from msfem import NullSpaceType
 
 
-class SingleLevelASPreconditioner(object):
-    """An implementation of the single-level Additive Schwarz (AS)
+class OneLevelOASPreconditioner(object):
+    """An implementation of the one-level overlapping additive Schwarz (OAS)
     preconditioner using MsFEM basis functions as a coarse space.
     """
 
@@ -170,8 +170,8 @@ class SingleLevelASPreconditioner(object):
         return A_lu_decompositions
 
 
-class TwoLevelASPreconditioner(SingleLevelASPreconditioner):
-    """An implementation of the two-level Additive Schwarz (AS)
+class TwoLevelOASPreconditioner(OneLevelOASPreconditioner):
+    """An implementation of the two-level overlapping additive Schwarz (OAS)
     preconditioner using MsFEM basis functions as a coarse space.
     """
 

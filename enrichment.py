@@ -1,7 +1,7 @@
 from scipy.sparse import csc_matrix, vstack
 from scipy.sparse.linalg import LinearOperator
 from scipy.sparse.csgraph import connected_components
-from schwarz import TwoLevelASPreconditioner
+from schwarz import TwoLevelOASPreconditioner
 from solvers import cg, IterationsCounter
 import numpy as np
 
@@ -50,7 +50,7 @@ def global_coarse_space_enrichment(
 
     # Setup the two-level OAS preconditioner using the initial
     # coarse basis functions.
-    precond = TwoLevelASPreconditioner(A, Phi, N, n, k=overlap)
+    precond = TwoLevelOASPreconditioner(A, Phi, N, n, k=overlap)
     M = LinearOperator(A.shape, lambda x: precond.apply(x))
 
     # Variables used for the CG iterations run to detect error modes.
