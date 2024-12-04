@@ -139,7 +139,7 @@ def parse_args(example_description):
         "--precond",
         type=str,
         help="The preconditioning method to be used.",
-        choices=["none", "single-level", "two-level"],
+        choices=["none", "one-level", "two-level"],
         required=True,
     )
     parser.add_argument(
@@ -243,7 +243,7 @@ def run_example(
 
     print("===> Done ✔.")
 
-    if precond == "single-level":
+    if precond == "one-level":
         print("Initializing the preconditioner.")
         precond_op = schwarz.OneLevelOASPreconditioner(A, N, n, k, problem_type)
         print("===> Done ✔.")
