@@ -15,11 +15,12 @@ import solvers
 
 
 class FEMProblem(object):
-    def __init__(self, n: int, coeff: Any, num_dofs: int) -> None:
-        self.n = n
+    def __init__(self, nx: int, ny: int, coeff: Any, num_dofs: int) -> None:
+        self.nx = nx
+        self.ny = ny
         self.coeff = coeff
         self.num_dofs = num_dofs
-        self.mesh = MakeQuadMesh(nx=n, ny=n)
+        self.mesh = MakeQuadMesh(nx=nx, ny=ny)
 
     def _init_fes(self):
         raise NotImplementedError()
@@ -57,8 +58,8 @@ class FEMProblem(object):
 
 
 class DiffusionFEMProblem(FEMProblem):
-    def __init__(self, n: int, coeff: Any) -> None:
-        super().__init__(n, coeff, num_dofs=1)
+    def __init__(self, nx: int, ny: int, coeff: Any) -> None:
+        super().__init__(nx, ny, coeff, num_dofs=1)
 
     def _init_fes(self):
         return ngs.H1(self.mesh, dirichlet=".*")
@@ -72,8 +73,8 @@ class DiffusionFEMProblem(FEMProblem):
 
 
 class LinearElasticityFEMProblem(FEMProblem):
-    def __init__(self, n: int, coeff: Any) -> None:
-        super().__init__(n, coeff, num_dofs=2)
+    def __init__(self, nx: int, ny: int, coeff: Any) -> None:
+        super().__init__(nx, ny, coeff, num_dofs=2)
 
     def _init_fes(self):
         return ngs.VectorH1(self.mesh, dirichlet=".*")
@@ -118,15 +119,27 @@ class LinearElasticityFEMProblem(FEMProblem):
 def parse_args(example_description):
     parser = argparse.ArgumentParser(description=example_description)
     parser.add_argument(
-        "-N",
+        "-Nx",
         type=int,
-        help="The number of subdomains on each direction.",
+        help="The number of subdomains on the x-axis direction.",
         required=True,
     )
     parser.add_argument(
-        "-n",
+        "-Ny",
         type=int,
-        help="The number of cells on each direction within each subdomain.",
+        help="The number of subdomains on the y-axis direction.",
+        required=True,
+    )
+    parser.add_argument(
+        "-nx",
+        type=int,
+        help="The number of cells on the x-axis direction within each subdomain.",
+        required=True,
+    )
+    parser.add_argument(
+        "-ny",
+        type=int,
+        help="The number of cells on the y-axis direction within each subdomain.",
         required=True,
     )
     parser.add_argument(
@@ -148,7 +161,6 @@ def parse_args(example_description):
         help="The coarse space used to compute the basis functions. Required if using a two-level preconditioner.",
         choices=[
             "msfem",
-            "q1",
             "rgdsw-opt-1",
             "rgdsw-opt-2-2",
             "ams",
@@ -189,8 +201,10 @@ def parse_args(example_description):
 
 
 def run_example(
-    N: int,
-    n: int,
+    Nx: int,
+    Ny: int,
+    nx: int,
+    ny: int,
     k: int,
     precond: str,
     coarse_space: str,
@@ -203,8 +217,10 @@ def run_example(
     """Runs an example from the `examples` folder.
 
     Args:
-        N (int): The number of subdomains on each direction.
-        n (int): The number of cells on each direction within each subdomain.
+        Nx (int): The number of subdomains on the x-axis direction.
+        Ny (int): The number of subdomains on the y-axis direction.
+        nx (int): The number of cells on the x-axis direction within each subdomain.
+        ny (int): The number of cells on the y-axis direction within each subdomain.
         k (int): The number of overlapping layers for each subdomain, i.e., the overlap size.
         precond (str): The preconditioning method to be used.
         coarse_space (str): The coarse space used to compute the basis functions.
@@ -213,18 +229,19 @@ def run_example(
         coeff_eval (Callable): A callable object that evaluates the coefficient function nodally. Required if using a MsFEM coarse space.
         problem_type (msfem.NullSpaceType): The problem type to be run (diffusion or linear elasticity).
     """
-    # Number of nodes on each direction (m x m grid).
-    m = N * n + 1
+    # Number of nodes on each direction (mx x my grid).
+    mx = Nx * nx + 1
+    my = Ny * ny + 1
 
     print("Assembling the FE problem.")
 
     # Initialization of an instance of a FEM problem.
     match problem_type:
         case msfem.NullSpaceType.DIFFUSION:
-            fem_problem = DiffusionFEMProblem(m - 1, coeff_fem)
+            fem_problem = DiffusionFEMProblem(mx - 1, my - 1, coeff_fem)
             num_dofs_per_node = 1
         case msfem.NullSpaceType.LINEAR_ELASTICITY:
-            fem_problem = LinearElasticityFEMProblem(m - 1, coeff_fem)
+            fem_problem = LinearElasticityFEMProblem(mx - 1, my - 1, coeff_fem)
             num_dofs_per_node = 2
         case _:
             raise ValueError(
@@ -235,8 +252,10 @@ def run_example(
     A, b = fem_problem.assemble()
 
     # A mapping of the grid nodes to their respective dofs.
-    node_ids = np.arange(m**2)
-    ngs_dofs_map = np.array([node_ids + i * m**2 for i in range(num_dofs_per_node)]).T
+    node_ids = np.arange(mx * my)
+    ngs_dofs_map = np.array(
+        [node_ids + i * mx * my for i in range(num_dofs_per_node)]
+    ).T
     A = A[ngs_dofs_map.flatten(), :]
     A = A[:, ngs_dofs_map.flatten()]  # type: ignore
     b = b[ngs_dofs_map.flatten()]
@@ -245,34 +264,49 @@ def run_example(
 
     if precond == "one-level":
         print("Initializing the preconditioner.")
-        precond_op = schwarz.OneLevelOASPreconditioner(A, N, n, k, problem_type)
+        precond_op = schwarz.OneLevelOASPreconditioner(
+            A, Nx, Ny, nx, ny, k, problem_type
+        )
         print("===> Done ✔.")
     elif precond == "two-level":
         # Initialization of the coarse space.
         print("Initializing the coarse space.")
         match coarse_space:
             case "msfem":
-                cs = msfem.MsFEMCoarseSpace(N + 1, n + 1, A, coeff_eval, problem_type)
-            case "q1":
-                cs = msfem.Q1CoarseSpace(N + 1, n + 1, A, problem_type)
+                cs = msfem.MsFEMCoarseSpace(
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, coeff_eval, problem_type
+                )
             case "rgdsw-opt-1":
-                cs = msfem.RGDSWConstantCoarseSpace(N + 1, n + 1, A, problem_type)
+                cs = msfem.RGDSWConstantCoarseSpace(
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
+                )
             case "rgdsw-opt-2-2":
                 cs = msfem.RGDSWInverseDistanceCoarseSpace(
-                    N + 1, n + 1, A, problem_type
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
                 )
             case "slab-msfem":
                 cs = msfem.MsFEMSlabCoarseSpace(
-                    N + 1, n + 1, A, coeff_eval, slab_size, problem_type
+                    Nx + 1,
+                    Ny + 1,
+                    nx + 1,
+                    ny + 1,
+                    A,
+                    coeff_eval,
+                    slab_size,
+                    problem_type,
                 )
             case "ams":
-                cs = msfem.AMSCoarseSpace(N + 1, n + 1, A, problem_type)
+                cs = msfem.AMSCoarseSpace(
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
+                )
             case "gdsw":
                 if problem_type is not msfem.NullSpaceType.DIFFUSION:
                     raise ValueError(
                         "The GDSW coarse space is currently only available for the diffusion problem."
                     )
-                cs = msfem.GDSWCoarseSpace(N + 1, n + 1, A, problem_type)
+                cs = msfem.GDSWCoarseSpace(
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
+                )
             case _:
                 raise ValueError("Invalid coarse space.")
 
@@ -282,7 +316,9 @@ def run_example(
         print("===> Done ✔.")
 
         print("Initializing the preconditioner.")
-        precond_op = schwarz.TwoLevelOASPreconditioner(A, Phi, N, n, k, problem_type)
+        precond_op = schwarz.TwoLevelOASPreconditioner(
+            A, Phi, Nx, Ny, nx, ny, k, problem_type
+        )
         print("===> Done ✔.")
 
     # Solution of the system of equations using the Schwarz preconditioner.
@@ -301,7 +337,7 @@ def run_example(
         if not os.path.exists("./output"):
             os.mkdir("./output")
         fname = (
-            f"output_{m-1}x{m-1}_{N}x{N}_{precond}"
+            f"output_{mx - 1}x{my - 1}_{Nx}x{Ny}_{precond}"
             + (f"_{coarse_space}" if precond == "two-level" else "")
             + ".mat"
         )
