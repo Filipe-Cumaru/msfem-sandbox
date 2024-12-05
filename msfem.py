@@ -17,32 +17,42 @@ class NullSpaceType(Enum):
 
 
 class BaseCoarseSpace(object):
-    def __init__(self, N, n, c):
+    def __init__(self, Nx, Ny, nx, ny, c):
         """Constructor method.
 
         Args:
-            N (int): Number of coarse nodes on each direction.
-            n (int): Number of nodes on each direction within each subdomain.
+            Nx (int): The number of coarse nodes on the x-axis direction.
+            Ny (int): The number of coarse nodes on the y-axis direction.
+            nx (int): The number of nodes on the x-axis direction within each subdomain.
+            ny (int): The number of nodes on the y-axis direction within each subdomain.
             c (function): A function that computes the coefficient of the Laplace
             equation.
         """
-        if n < 3:
-            raise ValueError("n must be greater than 3")
+        if nx < 3 or ny < 3:
+            raise ValueError("nx and ny must be greater than 3")
 
-        self.N = N
-        self.n = n
-        self.m = (self.N - 1) * (self.n - 1) + 1
+        self.Nx = Nx
+        self.Ny = Ny
+        self.nx = nx
+        self.ny = ny
+
+        self.mx = (self.Nx - 1) * (self.nx - 1) + 1
+        self.my = (self.Ny - 1) * (self.ny - 1) + 1
+
+        self.Hx = 1 / (self.Nx - 1)
+        self.Hy = 1 / (self.Ny - 1)
+        self.hx = 1 / (self.mx - 1)
+        self.hy = 1 / (self.my - 1)
+
         self.c = c
-        self.H = 1 / (self.N - 1)
-        self.h = 1 / (self.m - 1)
+
         self.boundary_fine_nodes = [
             i
-            for i in range(self.m**2)
-            if i % self.m in (0, self.m - 1) or i < self.m or i >= self.m * (self.m - 1)
+            for i in range(self.mx * self.my)
+            if i % self.mx in (0, self.mx - 1)
+            or i < self.mx
+            or i >= self.mx * (self.my - 1)
         ]
-        self.coarse_edges = [
-            (v, v + 1) for v in range(self.N**2) if v % self.N != self.N - 1
-        ] + [(v, v + self.N) for v in range(self.N**2) if v // self.N < self.N - 1]
 
     def assemble_operator(self):
         raise NotImplementedError()
@@ -50,27 +60,35 @@ class BaseCoarseSpace(object):
 
 class RGDSWCoarseSpace(BaseCoarseSpace):
     def __init__(
-        self, N, n, A, c, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+        self,
+        Nx,
+        Ny,
+        nx,
+        ny,
+        A,
+        c,
+        null_space_type=NullSpaceType.DIFFUSION,
+        dofs_map=None,
     ):
-        super().__init__(N, n, c)
+        super().__init__(Nx, Ny, nx, ny, c)
         self.A = A
         self.P, self.P_I, self.P_B = self._compute_partitions()
 
         self.coarse_nodes = np.array(
             [
                 i
-                for i in range(self.N**2)
-                if i % self.N not in (0, self.N - 1)
-                and i >= self.N
-                and i < self.N * (self.N - 1)
+                for i in range(self.Nx * self.Ny)
+                if i % self.Nx not in (0, self.Nx - 1)
+                and i >= self.Nx
+                and i < self.Nx * (self.Ny - 1)
             ]
         )
-        self.coarse_nodes_global_idx = (self.coarse_nodes % self.N) * (self.n - 1) + (
-            self.coarse_nodes // self.N
-        ) * (self.n - 1) * self.m
+        self.coarse_nodes_global_idx = (self.coarse_nodes % self.Nx) * (self.nx - 1) + (
+            self.coarse_nodes // self.Nx
+        ) * (self.ny - 1) * self.mx
 
         self.xs, self.ys = np.meshgrid(
-            np.linspace(0, 1, self.m), np.linspace(0, 1, self.m)
+            np.linspace(0, 1, self.mx), np.linspace(0, 1, self.my)
         )
         self.xs, self.ys = self.xs.flatten(), self.ys.flatten()
 
@@ -88,7 +106,7 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
             self.dofs_map = (
                 dofs_map
                 if dofs_map is not None
-                else np.arange(self.m**2).reshape((self.m**2, 1))
+                else np.arange(self.mx * self.my).reshape((self.mx * self.my, 1))
             )
         elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY:
             self.num_dofs = 2
@@ -96,7 +114,7 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
             self.dofs_map = (
                 dofs_map
                 if dofs_map is not None
-                else np.array([[2 * i, 2 * i + 1] for i in range(self.m**2)])
+                else np.array([[2 * i, 2 * i + 1] for i in range(self.mx * self.my)])
             )
         elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY_NO_ROTATION:
             self.num_dofs = 2
@@ -104,14 +122,19 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
             self.dofs_map = (
                 dofs_map
                 if dofs_map is not None
-                else np.array([[2 * i, 2 * i + 1] for i in range(self.m**2)])
+                else np.array([[2 * i, 2 * i + 1] for i in range(self.mx * self.my)])
             )
 
     def assemble_operator(self):
         interface_pou = self._compute_interface_pou()
-        Phi = lil_matrix((self.null_space_size * self.N**2, self.num_dofs * self.m**2))
+        Phi = lil_matrix(
+            (
+                self.null_space_size * self.Nx * self.Ny,
+                self.num_dofs * self.mx * self.my,
+            )
+        )
 
-        for i in range((self.N - 1) ** 2):
+        for i in range((self.Nx - 1) * (self.Ny - 1)):
             # The set of fine nodes in the subdomain.
             Omega_i = self.P[:, i].nonzero()[0]
             Omega_i_dofs = self.dofs_map[Omega_i, :].flatten()
@@ -128,10 +151,10 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
             # the corners that form the square subdomain.
             Omega_i_coarse_vertices = np.array(
                 [
-                    i % (self.N - 1) + (i // (self.N - 1)) * self.N,
-                    i % (self.N - 1) + (i // (self.N - 1)) * self.N + 1,
-                    i % (self.N - 1) + (i // (self.N - 1)) * self.N + self.N,
-                    i % (self.N - 1) + (i // (self.N - 1)) * self.N + self.N + 1,
+                    i % (self.Nx - 1) + (i // (self.Nx - 1)) * self.Nx,
+                    i % (self.Nx - 1) + (i // (self.Nx - 1)) * self.Nx + 1,
+                    i % (self.Nx - 1) + (i // (self.Nx - 1)) * self.Nx + self.Nx,
+                    i % (self.Nx - 1) + (i // (self.Nx - 1)) * self.Nx + self.Nx + 1,
                 ]
             )
 
@@ -233,7 +256,8 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
         ipou_col_idx.extend(self.coarse_nodes_global_idx)
 
         interface_pou = csc_matrix(
-            (ipou_values, (ipou_row_idx, ipou_col_idx)), shape=(self.N**2, self.m**2)
+            (ipou_values, (ipou_row_idx, ipou_col_idx)),
+            shape=(self.Nx * self.Ny, self.mx * self.my),
         )
 
         return interface_pou
@@ -242,9 +266,9 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
         interface_nodes = np.array(
             [
                 ni
-                for ni in range(self.m**2)
-                if ((ni % self.m) % (self.n - 1)) == 0
-                or ((ni // self.m) % (self.n - 1)) == 0
+                for ni in range(self.mx * self.my)
+                if ((ni % self.mx) % (self.nx - 1)) == 0
+                or ((ni // self.mx) % (self.ny - 1)) == 0
             ]
         )
         gamma = np.setdiff1d(interface_nodes, self.boundary_fine_nodes)  # type: ignore
@@ -255,8 +279,8 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
         D_values = []
 
         for nc in self.coarse_nodes:
-            Ni, Nj = nc % self.N, nc // self.N
-            x_nc, y_nc = Ni * self.H, Nj * self.H
+            Ni, Nj = nc % self.Nx, nc // self.Nx
+            x_nc, y_nc = Ni * self.Hx, Nj * self.Hy
 
             nc_global_idx = self.coarse_nodes_global_idx[self.coarse_nodes == nc]
             supp_subdomains = self.P[nc_global_idx, :].nonzero()[1]
@@ -274,7 +298,10 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
             D_row_idx.extend(gamma_nodes)
             D_col_idx.extend(len(inv_dist) * [nc])
 
-        D = csc_matrix((D_values, (D_row_idx, D_col_idx)), shape=(self.m**2, self.N**2))
+        D = csc_matrix(
+            (D_values, (D_row_idx, D_col_idx)),
+            shape=(self.mx * self.my, self.Nx * self.Ny),
+        )
 
         return D
 
@@ -291,36 +318,41 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
         raise NotImplementedError()
 
     def _compute_partitions(self):
-        # Since each subdomain is a square, the partition is computed by
+        # Since each subdomain is a rectangle, the partition is computed by
         # moving a "window" across the domain and assigning the nodes within
         # the window to the subdomain.
-        ref_idx = np.arange(self.n, dtype=int)
-        ref_window = np.concatenate([ref_idx + j * self.m for j in range(self.n)])
+        ref_idx = np.arange(self.nx, dtype=int)
+        ref_window = np.concatenate([ref_idx + j * self.mx for j in range(self.ny)])
 
         row_idx = []
         col_idx = []
-        R_values = []
+        P_values = []
 
-        N_cells = self.N - 1
-        n_cells = self.n - 1
-        for i in range(N_cells**2):
+        Nx_cells, Ny_cells = self.Nx - 1, self.Ny - 1
+        nx_cells, ny_cells = self.nx - 1, self.ny - 1
+        for i in range(Nx_cells * Ny_cells):
             # Horizontal and vertical displacement of the reference window.
-            displ_horiz, displ_vert = i % N_cells, i // N_cells
+            displ_horiz, displ_vert = i % Nx_cells, i // Nx_cells
 
             # The nodes in the subdomain \Omega_i.
             Omega_i = (
-                ref_window + (displ_horiz * n_cells) + (displ_vert * n_cells * self.m)
+                ref_window
+                + (displ_horiz * nx_cells)
+                + (displ_vert * ny_cells * self.mx)
             )
 
             row_idx.extend(Omega_i)
             col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
-            R_values.extend(np.ones(len(Omega_i)))
+            P_values.extend(np.ones(len(Omega_i)))
 
         # The partition of the nodes into each subdomain.
-        P = csc_matrix((R_values, (row_idx, col_idx)), shape=(self.m**2, N_cells**2))
+        P = csc_matrix(
+            (P_values, (row_idx, col_idx)),
+            shape=(self.mx * self.my, Nx_cells * Ny_cells),
+        )
 
         # The partition of the interior nodes for each subdomain.
-        outside_boundary_mask = np.ones((self.m**2, 1)).astype(bool)
+        outside_boundary_mask = np.ones((self.mx * self.my, 1)).astype(bool)
         outside_boundary_mask[self.boundary_fine_nodes] = False
         P_I = P.multiply((P.sum(axis=1) == 1) & outside_boundary_mask).tocsc()
 
@@ -341,7 +373,7 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
         if self.null_space_type is NullSpaceType.DIFFUSION:
             null_space = np.ones((len(Nc), 1))
         elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY:
-            x_c, y_c = (c % self.N) * self.H, (c // self.N) * self.H
+            x_c, y_c = (c % self.Nx) * self.Hx, (c // self.Ny) * self.Hy
             xs_n, ys_n = self.xs[Nc], self.ys[Nc]
             xs_cn, ys_cn = xs_n - x_c, ys_n - y_c
             null_space = np.zeros((len(Nc), 6))
@@ -359,9 +391,11 @@ class RGDSWConstantCoarseSpace(RGDSWCoarseSpace):
     Eq. 1 (option 1).
     """
 
-    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
+    def __init__(
+        self, Nx, Ny, nx, ny, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+    ):
         super().__init__(
-            N, n, A, None, null_space_type=null_space_type, dofs_map=dofs_map
+            Nx, Ny, nx, ny, A, None, null_space_type=null_space_type, dofs_map=dofs_map
         )
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
@@ -373,9 +407,11 @@ class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
     Eq. 5 (option 2.2).
     """
 
-    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
+    def __init__(
+        self, Nx, Ny, nx, ny, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+    ):
         super().__init__(
-            N, n, A, None, null_space_type=null_space_type, dofs_map=dofs_map
+            Nx, Ny, nx, ny, A, None, null_space_type=null_space_type, dofs_map=dofs_map
         )
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
@@ -390,9 +426,19 @@ class RGDSWInverseDistanceCoarseSpace(RGDSWCoarseSpace):
 
 class MsFEMCoarseSpace(RGDSWCoarseSpace):
     def __init__(
-        self, N, n, A, c, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+        self,
+        Nx,
+        Ny,
+        nx,
+        ny,
+        A,
+        c,
+        null_space_type=NullSpaceType.DIFFUSION,
+        dofs_map=None,
     ):
-        super().__init__(N, n, A, c, null_space_type=null_space_type, dofs_map=dofs_map)
+        super().__init__(
+            Nx, Ny, nx, ny, A, c, null_space_type=null_space_type, dofs_map=dofs_map
+        )
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         inv_dist = np.zeros(len(fine_nodes))
@@ -401,17 +447,19 @@ class MsFEMCoarseSpace(RGDSWCoarseSpace):
         for i, n in enumerate(fine_nodes):
             xn, yn = self.xs[n], self.ys[n]
             if np.isclose(xn, x_coarse):
-                yL = y_coarse - self.H if yn < y_coarse else y_coarse + self.H
+                yL = y_coarse - self.Hy if yn < y_coarse else y_coarse + self.Hy
                 inv_dist[i] = abs(quad(cy, yn, yL)[0])
             else:
-                xL = x_coarse - self.H if xn < x_coarse else x_coarse + self.H
+                xL = x_coarse - self.Hx if xn < x_coarse else x_coarse + self.Hx
                 inv_dist[i] = abs(quad(cx, xn, xL)[0])
         return inv_dist
 
 
 class AMSCoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
-        super().__init__(N, n, A, None, null_space_type, dofs_map)
+    def __init__(
+        self, Nx, Ny, nx, ny, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+    ):
+        super().__init__(Nx, Ny, nx, ny, A, None, null_space_type, dofs_map)
         self.vertex_nodes, self.edge_nodes, self.interior_nodes = (
             self._group_nodes_into_ams_classes()
         )
@@ -448,7 +496,7 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
             self.dofs_map[self.edge_nodes, :].flatten(order="F")
         )
         A_ee = block_diag(A_ee_blocks, format="csc")
-        A_ee = A_ee[edge_dofs_sort[:, None], edge_dofs_sort]
+        A_ee = A_ee[edge_dofs_sort[:, None], edge_dofs_sort]  # type: ignore
 
         # Apply the diagonal elimination to A_ee.
         A_ee = A_ee + diags(A_ei_sum[self.edge_dofs], format="csr")
@@ -500,24 +548,26 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
         interface_nodes = np.array(
             [
                 ni
-                for ni in range(self.m**2)
-                if ((ni % self.m) % (self.n - 1)) == 0
-                or ((ni // self.m) % (self.n - 1)) == 0
+                for ni in range(self.mx * self.my)
+                if ((ni % self.mx) % (self.nx - 1)) == 0
+                or ((ni // self.mx) % (self.ny - 1)) == 0
             ]
         )
         edge_nodes = np.setdiff1d(
             np.setdiff1d(interface_nodes, self.boundary_fine_nodes), vertex_nodes
         )
         interior_nodes = np.setdiff1d(
-            np.arange(self.m**2, dtype=int),
+            np.arange(self.mx * self.my, dtype=int),
             np.union1d(edge_nodes, vertex_nodes),
         )
         return vertex_nodes, edge_nodes, interior_nodes
 
 
 class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
-        super().__init__(N, n, A, None, null_space_type, dofs_map)
+    def __init__(
+        self, Nx, Ny, nx, ny, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+    ):
+        super().__init__(Nx, Ny, nx, ny, A, None, null_space_type, dofs_map)
         self.vertex_nodes, self.edge_nodes, self.interior_nodes = (
             self._group_nodes_into_ams_classes()
         )
@@ -551,7 +601,7 @@ class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
             self.dofs_map[self.edge_nodes, :].flatten(order="F")
         )
         A_ee = block_diag(A_ee_blocks, format="csc")
-        A_ee = A_ee[edge_dofs_sort[:, None], edge_dofs_sort]
+        A_ee = A_ee[edge_dofs_sort[:, None], edge_dofs_sort]  # type: ignore
 
         # Apply the diagonal elimination to A_ee.
         A_ee = A_ee + diags(A_ei_sum[self.edge_dofs], format="csr")
@@ -591,9 +641,9 @@ class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
 
         # Extract the interface partition of unit that will be used in
         # the RGDSW extension.
-        ipou = csc_matrix((self.N**2, self.m**2))
+        ipou = csc_matrix((self.Nx * self.Ny, self.mx * self.my))
         coarse_dofs = num_dofs * np.arange(len(self.coarse_nodes), dtype=int)
-        fine_dofs = num_dofs * np.arange(self.m**2, dtype=int)
+        fine_dofs = num_dofs * np.arange(self.mx * self.my, dtype=int)
         ipou[self.coarse_nodes, :] = Phi[coarse_dofs[:, None], fine_dofs]
 
         return ipou
@@ -606,16 +656,16 @@ class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
         interface_nodes = np.array(
             [
                 ni
-                for ni in range(self.m**2)
-                if ((ni % self.m) % (self.n - 1)) == 0
-                or ((ni // self.m) % (self.n - 1)) == 0
+                for ni in range(self.mx * self.my)
+                if ((ni % self.mx) % (self.nx - 1)) == 0
+                or ((ni // self.mx) % (self.ny - 1)) == 0
             ]
         )
         edge_nodes = np.setdiff1d(
             np.setdiff1d(interface_nodes, self.boundary_fine_nodes), vertex_nodes
         )
         interior_nodes = np.setdiff1d(
-            np.arange(self.m**2, dtype=int),
+            np.arange(self.mx * self.my, dtype=int),
             np.union1d(edge_nodes, vertex_nodes),
         )
         return vertex_nodes, edge_nodes, interior_nodes
@@ -623,7 +673,16 @@ class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
 
 class MsFEMSlabCoarseSpace(MsFEMCoarseSpace):
     def __init__(
-        self, N, n, A, c, k, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+        self,
+        Nx,
+        Ny,
+        nx,
+        ny,
+        A,
+        c,
+        k,
+        null_space_type=NullSpaceType.DIFFUSION,
+        dofs_map=None,
     ):
         # The slab size in terms of the number of layers of elements.
         self.k = k
@@ -631,12 +690,14 @@ class MsFEMSlabCoarseSpace(MsFEMCoarseSpace):
         # A connectivity matrix indicating which nodes are neighbors.
         self.M = (A != 0).astype(int)
 
-        super().__init__(N, n, A, c, null_space_type=null_space_type, dofs_map=dofs_map)
+        super().__init__(
+            Nx, Ny, nx, ny, A, c, null_space_type=null_space_type, dofs_map=dofs_map
+        )
 
     def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
         # Get the global indices for the coarse node and its neighbors.
         _, _, nc_neighbors_idx = np.intersect1d(
-            [nc - 1, nc + 1, nc + self.N, nc - self.N],
+            [nc - 1, nc + 1, nc + self.Nx, nc - self.Nx],
             self.coarse_nodes,
             return_indices=True,
         )
@@ -687,7 +748,7 @@ class GDSWCoarseSpace(RGDSWCoarseSpace):
         )
 
         # Interior nodes
-        I = np.setdiff1d(np.arange(self.m**2), Gamma)
+        I = np.setdiff1d(np.arange(self.mx * self.my), Gamma)
 
         # Permutation indices
         G = np.hstack((I, Gamma)).argsort()
@@ -737,7 +798,7 @@ class GDSWCoarseSpace(RGDSWCoarseSpace):
         # the interior.
         Phi_int = csc_matrix(
             (Phi_int_values, (Phi_int_rows, Phi_int_cols)),
-            shape=(self.m**2, N_int_components),
+            shape=(self.mx * self.my, N_int_components),
         )
 
         return Phi_int
