@@ -409,25 +409,6 @@ class MsFEMCoarseSpace(RGDSWCoarseSpace):
         return inv_dist
 
 
-class Q1CoarseSpace(RGDSWCoarseSpace):
-    def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
-        super().__init__(
-            N, n, A, None, null_space_type=null_space_type, dofs_map=dofs_map
-        )
-
-    def _compute_inv_distances(self, fine_nodes, x_coarse, y_coarse, nc):
-        inv_dist = np.zeros(len(fine_nodes))
-        for i, n in enumerate(fine_nodes):
-            xn, yn = self.xs[n], self.ys[n]
-            if np.isclose(xn, x_coarse):
-                yL = y_coarse - self.H if yn < y_coarse else y_coarse + self.H
-                inv_dist[i] = abs(yn - yL)
-            else:
-                xL = x_coarse - self.H if xn < x_coarse else x_coarse + self.H
-                inv_dist[i] = abs(xn - xL)
-        return inv_dist
-
-
 class AMSCoarseSpace(RGDSWCoarseSpace):
     def __init__(self, N, n, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
         super().__init__(N, n, A, None, null_space_type, dofs_map)
