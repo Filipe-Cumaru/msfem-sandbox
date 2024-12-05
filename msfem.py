@@ -16,7 +16,7 @@ class NullSpaceType(Enum):
     LINEAR_ELASTICITY_NO_ROTATION = 3
 
 
-class MSBasisFunction(object):
+class BaseCoarseSpace(object):
     def __init__(self, N, n, c):
         """Constructor method.
 
@@ -48,7 +48,7 @@ class MSBasisFunction(object):
         raise NotImplementedError()
 
 
-class RGDSWCoarseSpace(MSBasisFunction):
+class RGDSWCoarseSpace(BaseCoarseSpace):
     def __init__(
         self, N, n, A, c, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
     ):
