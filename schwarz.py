@@ -6,18 +6,28 @@ from msfem import NullSpaceType
 
 class OneLevelOASPreconditioner(object):
     """An implementation of the one-level overlapping additive Schwarz (OAS)
-    preconditioner using MsFEM basis functions as a coarse space.
+    preconditioner.
     """
 
     def __init__(
-        self, A, N, n, k, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+        self,
+        A,
+        Nx,
+        Ny,
+        nx,
+        ny,
+        k,
+        null_space_type=NullSpaceType.DIFFUSION,
+        dofs_map=None,
     ) -> None:
         """Constructor
 
         Args:
             A (sparse matrix): The matrix of the linear system.
-            N (int): Number of subdomains on each direction.
-            n (int): Number of cells per subdomain on each direction.
+            Nx (int): The number of subdomains on the x-axis direction.
+            Ny (int): The number of subdomains on the y-axis direction.
+            nx (int): The number of cells on the x-axis direction within each subdomain.
+            ny (int): The number of cells on the y-axis direction within each subdomain.
             k (int): Number of layers for the overlap.
             null_space_type(NullSpaceType, optional): The kind of problem solved.
             Optional, defaults to NullSpaceType.DIFFUSION.
@@ -25,12 +35,15 @@ class OneLevelOASPreconditioner(object):
             as a # nodes X # dofs numpy array. Optional, defaults to None.
         """
         self.A = A
-        self.N = N
-        self.n = n
+        self.Nx = Nx
+        self.Ny = Ny
+        self.nx = nx
+        self.ny = ny
         self.k = k
 
         # Number of nodes on each direction for the global domain.
-        self.m = self.N * self.n + 1
+        self.mx = self.Nx * self.nx + 1
+        self.my = self.Ny * self.ny + 1
 
         if not isinstance(null_space_type, NullSpaceType):
             raise ValueError(
@@ -42,14 +55,14 @@ class OneLevelOASPreconditioner(object):
             self.dofs_map = (
                 dofs_map
                 if dofs_map is not None
-                else np.arange(self.m**2).reshape((self.m**2, 1))
+                else np.arange(self.mx * self.my).reshape((self.mx * self.my, 1))
             )
             self.num_dofs = 1
         elif self.null_space_type is NullSpaceType.LINEAR_ELASTICITY:
             self.dofs_map = (
                 dofs_map
                 if dofs_map is not None
-                else np.array([[2 * i, 2 * i + 1] for i in range(self.m**2)])
+                else np.array([[2 * i, 2 * i + 1] for i in range(self.mx * self.my)])
             )
             self.num_dofs = 2
 
@@ -79,9 +92,9 @@ class OneLevelOASPreconditioner(object):
         Returns:
             numpy.ndarray: The preconditioned iterate.
         """
-        y = np.zeros(self.num_dofs * (self.m**2))
+        y = np.zeros(x.shape[0])
 
-        for i in range(self.N**2):
+        for i in range(self.P.shape[1]):  # type: ignore
             Omega_i_extended = self.P_extended[:, i].nonzero()[0]
             Omega_i_extended_dofs = self.dofs_map[Omega_i_extended, :].flatten()
             A_i_lu = self.A_i_lu_decompostions[i]
@@ -98,33 +111,35 @@ class OneLevelOASPreconditioner(object):
         # Since each subdomain is a square, the partition is computed by
         # moving a "window" across the domain and assigning the nodes within
         # the window to the subdomain.
-        ref_idx = np.arange(self.n + 1, dtype=int)
-        ref_window = np.concatenate([ref_idx + j * self.m for j in range(self.n + 1)])
+        ref_idx = np.arange(self.nx + 1, dtype=int)
+        ref_window = np.concatenate([ref_idx + j * self.mx for j in range(self.ny + 1)])
 
         row_idx = []
         col_idx = []
         P_values = []
 
-        for i in range(self.N**2):
+        for i in range(self.Nx * self.Ny):
             # Horizontal and vertical displacement of the reference window.
-            displ_horiz, displ_vert = i % self.N, i // self.N
+            displ_horiz, displ_vert = i % self.Nx, i // self.Nx
 
             # The nodes in the subdomain \Omega_i.
             Omega_i = (
-                ref_window + (displ_horiz * self.n) + (displ_vert * self.n * self.m)
+                ref_window + (displ_horiz * self.nx) + (displ_vert * self.ny * self.mx)
             )
 
             row_idx.extend(Omega_i)
             col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
             P_values.extend(np.ones(len(Omega_i)))
 
-        return csc_matrix((P_values, (row_idx, col_idx)), shape=(self.m**2, self.N**2))
+        return csc_matrix(
+            (P_values, (row_idx, col_idx)), shape=(self.mx * self.my, self.Nx * self.Ny)
+        )
 
     def _compute_overlapping_partitions(self):
         row_idx = []
         col_idx = []
 
-        for i in range(self.N**2):
+        for i in range(self.Nx * self.Ny):
             # First, retrieve the nodes in the subdomain.
             Omega_i = self.P[:, i].nonzero()[0]
 
@@ -136,7 +151,7 @@ class OneLevelOASPreconditioner(object):
 
         return csc_matrix(
             (np.ones(len(row_idx)), (row_idx, col_idx)),
-            shape=(self.m**2, self.N**2),
+            shape=(self.mx * self.my, self.Nx * self.Ny),
         )
 
     def _compute_overlap(self, Omega_i, l):
@@ -161,7 +176,7 @@ class OneLevelOASPreconditioner(object):
 
     def _compute_local_lu_decompositions(self):
         A_lu_decompositions = []
-        for i in range(self.N**2):
+        for i in range(self.Nx * self.Ny):
             Omega_i_extended = self.P_extended[:, i].nonzero()[0]
             Omega_i_extended_dofs = self.dofs_map[Omega_i_extended, :].flatten()
             A_i = self.A[Omega_i_extended_dofs, Omega_i_extended_dofs[:, None]]
@@ -172,13 +187,24 @@ class OneLevelOASPreconditioner(object):
 
 class TwoLevelOASPreconditioner(OneLevelOASPreconditioner):
     """An implementation of the two-level overlapping additive Schwarz (OAS)
-    preconditioner using MsFEM basis functions as a coarse space.
+    preconditioner.
     """
 
     def __init__(
-        self, A, Phi, N, n, k, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None
+        self,
+        A,
+        Phi,
+        Nx,
+        Ny,
+        nx,
+        ny,
+        k,
+        null_space_type=NullSpaceType.DIFFUSION,
+        dofs_map=None,
     ) -> None:
-        super().__init__(A, N, n, k, null_space_type=null_space_type, dofs_map=dofs_map)
+        super().__init__(
+            A, Nx, Ny, nx, ny, k, null_space_type=null_space_type, dofs_map=dofs_map
+        )
         self.Phi = Phi
         self.A_0_lu = splu(self.Phi @ (self.A @ self.Phi.transpose()))
 
