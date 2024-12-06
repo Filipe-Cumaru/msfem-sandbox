@@ -77,16 +77,26 @@ Much of the work done in this repository is based on the references below.
 }
 
 @article{Souza2022,
-    title = {An algebraic multiscale solver for the simulation of two-phase flow in heterogeneous and anisotropic porous media using general unstructured grids (AMS-U)},
-    journal = {Applied Mathematical Modelling},
-    volume = {103},
-    pages = {792-823},
-    year = {2022},
-    issn = {0307-904X},
-    doi = {https://doi.org/10.1016/j.apm.2021.11.017},
-    url = {https://www.sciencedirect.com/science/article/pii/S0307904X21005552},
-    author = {Artur Castiel Reis {de Souza} and Darlan Karlo Elisiário {de Carvalho} and José Cícero Araujo {dos Santos} and Ramiro Brito Willmersdorf and Paulo Roberto Maciel Lyra and Michael G. Edwards},
-    keywords = {MsFV, AMS, MPFA-D, Unstructured grids, Background grid, Reservoir simulation}
+   title = {An algebraic multiscale solver for the simulation of two-phase flow in heterogeneous and anisotropic porous media using general unstructured grids (AMS-U)},
+   journal = {Applied Mathematical Modelling},
+   volume = {103},
+   pages = {792-823},
+   year = {2022},
+   issn = {0307-904X},
+   doi = {https://doi.org/10.1016/j.apm.2021.11.017},
+   url = {https://www.sciencedirect.com/science/article/pii/S0307904X21005552},
+   author = {Artur Castiel Reis {de Souza} and Darlan Karlo Elisiário {de Carvalho} and José Cícero Araujo {dos Santos} and Ramiro Brito Willmersdorf and Paulo Roberto Maciel Lyra and Michael G. Edwards},
+   keywords = {MsFV, AMS, MPFA-D, Unstructured grids, Background grid, Reservoir simulation}
+}
+
+@misc{Alves2024,
+   title={A computational study of algebraic coarse spaces for two-level overlapping additive Schwarz preconditioners}, 
+   author={Filipe A. C. S. Alves and Alexander Heinlein and Hadi Hajibeygi},
+   year={2024},
+   eprint={2408.08187},
+   archivePrefix={arXiv},
+   primaryClass={math.NA},
+   url={https://arxiv.org/abs/2408.08187}, 
 }
 ```
 
