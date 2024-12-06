@@ -2,22 +2,23 @@ import numpy as np
 import ngsolve as ngs
 from ..utils import run_example, parse_args, msfem
 
-N, n = 0, 0
+Nx, Ny = 0, 0
+nx, ny = 0, 0
 
 
 def coeff_eval(x, y):
-    global N, n
-    m = N * n
-    h = 1 / m
-    margin = 2 * h
-    xcs, ycs = np.meshgrid(np.linspace(0, 1, N + 1), np.linspace(0, 1, N + 1))
+    global Nx, Ny, nx, ny
+    mx, my = Nx * nx, Ny * ny
+    hx, hy = 1 / mx, 1 / my
+    lx, ly = 2 * hx, 2 * hy
+    xcs, ycs = np.meshgrid(np.linspace(0, 1, Nx + 1), np.linspace(0, 1, Ny + 1))
     xcs, ycs = xcs.flatten(), ycs.flatten()
     mask = (xcs > 0) & (xcs < 1) & (ycs > 0) & (ycs < 1)
     xcs, ycs = xcs[mask], ycs[mask]
 
-    coarse_node_check = (
-        np.isclose(np.abs(xcs - x), margin) | (np.abs(xcs - x) < margin)
-    ) & (np.isclose(np.abs(ycs - y), margin) | (np.abs(ycs - y) < margin))
+    coarse_node_check = (np.isclose(np.abs(xcs - x), lx) | (np.abs(xcs - x) < lx)) & (
+        np.isclose(np.abs(ycs - y), ly) | (np.abs(ycs - y) < ly)
+    )
 
     E1, E2, Nu = 1e4, 1, 0.3
     Lambda1 = E1 * Nu / ((1 + Nu) * (1 - 2 * Nu))
@@ -27,34 +28,39 @@ def coeff_eval(x, y):
 
 
 def coeff_fem():
-    global N, n
+    global Nx, Ny, nx, ny
+    Hx, Hy = 1 / Nx, 1 / Ny
+    hx, hy = 1 / (Nx * nx), 1 / (Ny * ny)
+    lx, ly = 2 * hx, 2 * hy
     E, Nu = 0, 0.3
-    H, h = 1 / N, 1 / (N * n)
-    l = 4 * h
-    for i in range(1, N):
-        for j in range(1, N):
-            ox, oy = i * H, j * H
+    for i in range(1, Nx):
+        for j in range(1, Ny):
+            ox, oy = i * Hx, j * Hy
             E += ngs.IfPos(
-                ngs.sqrt((ngs.x - ox + ngs.y - oy) ** 2)
-                + ngs.sqrt((ngs.x - ox - ngs.y + oy) ** 2)
-                - l,
-                (N - 1) ** (-2),
+                ngs.sqrt(((ngs.x - ox) / lx + (ngs.y - oy) / ly) ** 2)
+                + ngs.sqrt(((ngs.x - ox) / lx - (ngs.y - oy) / ly) ** 2)
+                - 2,
+                (Nx - 1) * (Ny - 1),
                 1e4,
             )
     return E, E, Nu
 
 
 def main(args):
-    global N, n
-    N = args.N
-    n = args.n
+    global Nx, Ny, nx, ny
+    Nx = args.Nx
+    Ny = args.Ny
+    nx = args.nx
+    ny = args.ny
     k = args.k
     precond = args.precond
     coarse_space = args.coarse_space
     slab_size = args.slab_size
     run_example(
-        N,
-        n,
+        Nx,
+        Ny,
+        nx,
+        ny,
         k,
         precond,
         coarse_space,
