@@ -10,15 +10,19 @@ def coeff_fem():
 
 
 def main(args):
-    N = args.N
-    n = args.n
+    Nx = args.Nx
+    Ny = args.Ny
+    nx = args.nx
+    ny = args.ny
     k = args.k
     precond = args.precond
     coarse_space = args.coarse_space
     slab_size = args.slab_size
     run_example(
-        N,
-        n,
+        Nx,
+        Ny,
+        nx,
+        ny,
         k,
         precond,
         coarse_space,
