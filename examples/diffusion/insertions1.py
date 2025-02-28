@@ -36,7 +36,7 @@ def coeff_fem():
                 ngs.sqrt(((ngs.x - ox) / lx + (ngs.y - oy) / ly) ** 2)
                 + ngs.sqrt(((ngs.x - ox) / lx - (ngs.y - oy) / ly) ** 2)
                 - 2,
-                (Nx - 1) * (Ny - 1),
+                1 / ((Nx - 1) * (Ny - 1)),
                 1e8,
             )
     return c
