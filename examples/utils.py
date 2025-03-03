@@ -166,6 +166,7 @@ def parse_args(example_description):
             "ams",
             "slab-msfem",
             "gdsw",
+            "spectral-ams"
         ],
         default=None,
         required=False,
@@ -307,6 +308,8 @@ def run_example(
                 cs = msfem.GDSWCoarseSpace(
                     Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
                 )
+            case "spectral-ams":
+                cs = msfem.SpectralAMSCoarseSpace(Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type)
             case _:
                 raise ValueError("Invalid coarse space.")
 
