@@ -1,4 +1,4 @@
-# msfem-sandbox
+# Coarse space prototyping
 
 A collection of coarse spaces for the two-level additive Schwarz preconditioner implemented in Python for 2-D elliptic problems.
 
