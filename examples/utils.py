@@ -46,6 +46,14 @@ class FEMProblem(object):
         A = coo_matrix((vals, (rows, cols))).tocsc()
         b = f.vec.FV().NumPy()
 
+        # BUG: This is a workaround due to some errors in SciPy
+        # related to the size of the integer used for the indices.
+        # It has been reported in some issues:
+        # https://github.com/scipy/scipy/issues/13155
+        # https://github.com/scipy/scipy/issues/16774
+        A.indptr = A.indptr.astype(np.int64)
+        A.indices = A.indices.astype(np.int64)
+
         # Set boundary conditions.
         boundary_dofs = np.nonzero(~fes.FreeDofs())[0]
         A[boundary_dofs, :] *= 0  # type: ignore
