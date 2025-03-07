@@ -179,6 +179,13 @@ def parse_args(example_description):
         required=False,
     )
     parser.add_argument(
+        "--enrichment-tol",
+        type=float,
+        help="The tolerance value used to select the eigenvalues related to the eigenmodes used in the spectral enrichment of AMS. Required if using the coarse space spectral-ams",
+        default=None,
+        required=False,
+    )
+    parser.add_argument(
         "--output",
         action="store_true",
         help="Enables the output. The solution will be saved in the `output` directory as a .npy file.",
@@ -197,6 +204,14 @@ def parse_args(example_description):
         parser.error(
             "Using the coarse space slab-msfem requires --slab-size to be specified."
         )
+    if (
+        args.precond == "two-level"
+        and args.coarse_space == "spectral-ams"
+        and args.enrichment_tol is None
+    ):
+        parser.error(
+            "Using the coarse space spectral-ams requires --enrichment-tol to be specified."
+        )
 
     return args
 
@@ -214,6 +229,7 @@ def run_example(
     coeff_eval: Callable,
     problem_type: msfem.NullSpaceType,
     output: bool,
+    enrichment_tol: float
 ):
     """Runs an example from the `examples` folder.
 
@@ -309,7 +325,9 @@ def run_example(
                     Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
                 )
             case "spectral-ams":
-                cs = msfem.SpectralAMSCoarseSpace(Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type)
+                cs = msfem.SpectralAMSCoarseSpace(
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type, tol=enrichment_tol
+                )
             case _:
                 raise ValueError("Invalid coarse space.")
 
