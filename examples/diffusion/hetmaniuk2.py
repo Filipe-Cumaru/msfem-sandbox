@@ -34,6 +34,7 @@ def main(args):
         coeff_eval,
         problem_type=msfem.NullSpaceType.DIFFUSION,
         output=args.output,
+        enrichment_tol=args.enrichment_tol
     )
 
 
