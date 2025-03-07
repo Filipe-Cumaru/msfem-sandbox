@@ -823,9 +823,9 @@ class SpectralAMSCoarseSpace(AMSCoarseSpace):
         self.tol = tol
     
     def assemble_operator(self):
-        # TODO: Extract these variables to attributes.
-        tol = 1e-3
-        opt = 2
+        # Assemble the original AMS operator without
+        # the added functions.
+        Phi_ams = super().assemble_operator()
 
         Phi_cols, Phi_rows, Phi_vals = [], [], []
         num_new_bfs = 0
@@ -846,39 +846,39 @@ class SpectralAMSCoarseSpace(AMSCoarseSpace):
                 Phi_vals.extend(critical_eigmodes[:, j])
                 num_new_bfs += 1
         
-        # Interface nodes
-        Gamma = np.setdiff1d(
-            np.where(self.P_B.sum(axis=1) > 1)[0], self.boundary_fine_nodes
-        )
+        if num_new_bfs > 0:
+            # Interface nodes
+            Gamma = np.setdiff1d(
+                np.where(self.P_B.sum(axis=1) > 1)[0], self.boundary_fine_nodes
+            )
 
-        # Interior nodes
-        I = np.setdiff1d(np.arange(self.mx * self.my), Gamma)
+            # Interior nodes
+            I = np.setdiff1d(np.arange(self.mx * self.my), Gamma)
 
-        # Permutation indices
-        G = np.hstack((I, Gamma)).argsort()
+            # Permutation indices
+            G = np.hstack((I, Gamma)).argsort()
 
-        # Blocks for the discrete harmonic extension.
-        A_II = self.A[I[:, None], I]
-        A_IGamma = self.A[I[:, None], Gamma]
+            # Blocks for the discrete harmonic extension.
+            A_II = self.A[I[:, None], I]
+            A_IGamma = self.A[I[:, None], Gamma]
 
-        # TODO: Add some guards to check if any new function was added,
-        # i.e., if num_new_bfs > 0.
-        # Interface basis functions.
-        Phi_Gamma_ext = csc_matrix(
-            (Phi_vals, (Phi_rows, Phi_cols)),
-            shape=(self.mx * self.my, num_new_bfs),
-        )
-        Phi_Gamma = Phi_Gamma_ext[Gamma, :]
+            # Interface basis functions.
+            Phi_Gamma_ext = csc_matrix(
+                (Phi_vals, (Phi_rows, Phi_cols)),
+                shape=(self.mx * self.my, num_new_bfs),
+            )
+            Phi_Gamma = Phi_Gamma_ext[Gamma, :]
 
-        # Compute the discrete harmonic extension from the
-        # interface to the interior.
-        Phi_I = -spsolve(A_II, A_IGamma @ Phi_Gamma)
+            # Compute the discrete harmonic extension from the
+            # interface to the interior.
+            Phi_I = -spsolve(A_II, A_IGamma @ Phi_Gamma)
 
-        # Assemble the whole operator.
-        Phi = vstack((Phi_I, Phi_Gamma), format="csc").T
-        Phi = Phi[:, G]
+            # Assemble the whole operator.
+            Phi = vstack((Phi_I, Phi_Gamma), format="csc").T
+            Phi = Phi[:, G]
 
-        Phi_ams = super().assemble_operator()
-        Phi = vstack((Phi_ams, Phi), format="csc")
+            Phi = vstack((Phi_ams, Phi), format="csc")
+        else:
+            Phi = Phi_ams
 
         return Phi
