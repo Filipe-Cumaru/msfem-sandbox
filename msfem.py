@@ -809,8 +809,7 @@ class GDSWCoarseSpace(RGDSWCoarseSpace):
 
 
 class SpectralAMSCoarseSpace(AMSCoarseSpace):
-    # TODO: Think of a better name for this method?
-    def __init__(self, Nx, Ny, nx, ny, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None):
+    def __init__(self, Nx, Ny, nx, ny, A, null_space_type=NullSpaceType.DIFFUSION, dofs_map=None, tol=1e-3):
         super().__init__(Nx, Ny, nx, ny, A, null_space_type, dofs_map)
         E = np.setdiff1d(
             np.where(self.P_B.sum(axis=1) == 2)[0], self.boundary_fine_nodes
@@ -821,6 +820,7 @@ class SpectralAMSCoarseSpace(AMSCoarseSpace):
             E[(repeated_subdomain_pairs[:, 0] == e1) & (repeated_subdomain_pairs[:, 1] == e2)]
             for _, (e1, e2) in enumerate(self.sorted_subdomain_pairs)
         ]
+        self.tol = tol
     
     def assemble_operator(self):
         # TODO: Extract these variables to attributes.
@@ -836,16 +836,9 @@ class SpectralAMSCoarseSpace(AMSCoarseSpace):
             Aei = self.A[e[:, None], in_dofs].toarray()
             Aee_mod = Aee + np.diag(Aei.sum(axis=1))
 
-            critical_eigmodes = np.array([])
-            if opt == 1:
-                # \tilde{K}_{ee}^{-1} v = \lambda v
-                Aee_inv = np.linalg.inv(Aee)
-                eigvals, eigmodes = eig(Aee_inv) # type: ignore
-                critical_eigmodes = eigmodes[:, np.real(eigvals) < tol]
-            elif opt == 2:
-                # \tilde{K}_{ee} v = \lambda K_{ee} v
-                eigvals, eigmodes = eig(Aee_mod, b=Aee) # type: ignore
-                critical_eigmodes = eigmodes[:, np.real(eigvals) < tol]
+            # \tilde{K}_{ee} v = \lambda K_{ee} v
+            eigvals, eigmodes = eig(Aee_mod, b=Aee) # type: ignore
+            critical_eigmodes = np.real(eigmodes[:, np.real(eigvals) < self.tol])
 
             for j in range(critical_eigmodes.shape[1]):
                 Phi_cols.extend([num_new_bfs] * len(e))
