@@ -7,39 +7,36 @@ nx, ny = 0, 0
 
 
 def coeff_eval(x, y):
-    global Nx, Ny, nx, ny
-    mx, my = Nx * nx, Ny * ny
-    hx, hy = 1 / mx, 1 / my
-    lx, ly = 2 * hx, 2 * hy
-    xcs, ycs = np.meshgrid(np.linspace(0, 1, Nx + 1), np.linspace(0, 1, Ny + 1))
-    xcs, ycs = xcs.flatten(), ycs.flatten()
-    mask = (xcs > 0) & (xcs < 1) & (ycs > 0) & (ycs < 1)
-    xcs, ycs = xcs[mask], ycs[mask]
-
-    coarse_node_check = (np.isclose(np.abs(xcs - x), lx) | (np.abs(xcs - x) < lx)) & (
-        np.isclose(np.abs(ycs - y), ly) | (np.abs(ycs - y) < ly)
-    )
-
-    return 1e8 if np.any(coarse_node_check) else 1
+    pass
 
 
 def coeff_fem():
     global Nx, Ny, nx, ny
     Hx, Hy = 1 / Nx, 1 / Ny
     hx, hy = 1 / (Nx * nx), 1 / (Ny * ny)
-    lx, ly = 2 * hx, 2 * hy
-    c = 0
+    lx, Lx = 2 * hx, 5 * hx
+    ly, Ly = 2 * hy, 5 * hy
+    c0, c1 = 0, 0
     for i in range(1, Nx):
         for j in range(1, Ny):
             ox, oy = i * Hx, j * Hy
-            c += ngs.IfPos(
+            c0 += ngs.IfPos(
                 ngs.sqrt(((ngs.x - ox) / lx + (ngs.y - oy) / ly) ** 2)
                 + ngs.sqrt(((ngs.x - ox) / lx - (ngs.y - oy) / ly) ** 2)
                 - 2,
-                1 / ((Nx - 1) * (Ny - 1)),
+                0,
                 1e8,
             )
-    return c
+            c1 += ngs.IfPos(
+                ngs.sqrt(((ngs.x - ox) / Lx + (ngs.y - oy) / Ly) ** 2)
+                + ngs.sqrt(((ngs.x - ox) / Lx - (ngs.y - oy) / Ly) ** 2)
+                - 2,
+                0,
+                1e8,
+            )
+    c2 = ngs.IfPos(c1 - c0, 0, 1)
+    c = (c1 - c0) + c2
+    return c.Compile()
 
 
 def main(args):
@@ -70,5 +67,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args("High coefficient inclusions on the coarse nodes.")
+    args = parse_args("High coefficient inclusions around the coarse nodes.")
     main(args)
