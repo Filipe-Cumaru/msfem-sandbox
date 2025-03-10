@@ -10,41 +10,40 @@ def coeff_eval(x, y):
     pass
 
 
-def coeff_fem():
+def coeff_fem(mesh):
     global Nx, Ny, nx, ny
-    Hx, Hy = 1 / Nx, 1 / Ny
+    mx, my = Nx * nx + 1, Ny * ny + 1
     hx, hy = 1 / (Nx * nx), 1 / (Ny * ny)
+
     lx_center, ly_center = 2 * hx, 2 * hy
     lx_side, ly_side = hx, 3 * hy
-    c0, c1, c2 = 0, 0, 0
-    for i in range(1, Nx):
-        for j in range(1, Ny):
-            ox, oy = i * Hx, j * Hy
-            ox_r, ox_l = i * Hx + 6 * hx, i * Hx - 6 * hx
-            c0 += ngs.IfPos(
-                ngs.sqrt(((ngs.x - ox) / lx_center + (ngs.y - oy) / ly_center) ** 2)
-                + ngs.sqrt(((ngs.x - ox) / lx_center - (ngs.y - oy) / ly_center) ** 2)
-                - 2,
-                0,
-                1e8,
-            )
-            c1 += ngs.IfPos(
-                ngs.sqrt(((ngs.x - ox_l) / lx_side + (ngs.y - oy) / ly_side) ** 2)
-                + ngs.sqrt(((ngs.x - ox_l) / lx_side - (ngs.y - oy) / ly_side) ** 2)
-                - 2,
-                0,
-                1e8,
-            )
-            c2 += ngs.IfPos(
-                ngs.sqrt(((ngs.x - ox_r) / lx_side + (ngs.y - oy) / ly_side) ** 2)
-                + ngs.sqrt(((ngs.x - ox_r) / lx_side - (ngs.y - oy) / ly_side) ** 2)
-                - 2,
-                0,
-                1e8,
-            )
-    c3 = ngs.IfPos(c0 + c1 + c2, 0, 1)
-    c = c0 + c1 + c2 + c3
-    return c.Compile()
+
+    material_fes = ngs.L2(mesh, order=0)
+    material_gf = ngs.GridFunction(material_fes)
+
+    Xs, Ys = np.meshgrid(np.linspace(0, 1, Nx + 1)[1:-1], 
+                         np.linspace(0, 1, Ny + 1)[1:-1])
+    mask = np.zeros(mx * my, dtype=bool)
+
+    elem_vertices = np.array([
+        [mesh[vID].point for vID in el.vertices] for el in mesh.Elements()])
+    for ox, oy in zip(Xs.flatten(), Ys.flatten()):
+        ox_r, ox_l = ox + 6 * hx, ox - 6 * hx
+
+        dx = np.abs(elem_vertices[:, :, 0] - ox)
+        dy = np.abs(elem_vertices[:, :, 1] - oy)
+
+        dx_r = np.abs(elem_vertices[:, :, 0] - ox_r)
+        dx_l = np.abs(elem_vertices[:, :, 0] - ox_l)
+
+        mask = mask \
+            | np.all((dx <= lx_center) & (dy <= ly_center), axis=1) \
+            | np.all((dx_r <= lx_side) & (dy <= ly_side), axis=1) \
+            | np.all((dx_l <= lx_side) & (dy <= ly_side), axis=1)
+
+    material_gf.vec.FV().NumPy()[:] = 1
+    material_gf.vec.FV().NumPy()[mask] = 1e8
+    return ngs.CoefficientFunction(material_gf).Compile()
 
 
 def main(args):
