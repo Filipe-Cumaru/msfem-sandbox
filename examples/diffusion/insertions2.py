@@ -12,7 +12,6 @@ def coeff_eval(x, y):
 
 def coeff_fem(mesh):
     global Nx, Ny, nx, ny
-    mx, my = Nx * nx + 1, Ny * ny + 1
     hx, hy = 1 / (Nx * nx), 1 / (Ny * ny)
 
     lx_center, ly_center = 2 * hx, 2 * hy
@@ -23,10 +22,10 @@ def coeff_fem(mesh):
 
     Xs, Ys = np.meshgrid(np.linspace(0, 1, Nx + 1)[1:-1], 
                          np.linspace(0, 1, Ny + 1)[1:-1])
-    mask = np.zeros(mx * my, dtype=bool)
-
     elem_vertices = np.array([
         [mesh[vID].point for vID in el.vertices] for el in mesh.Elements()])
+    mask = np.zeros(elem_vertices.shape[0], dtype=bool)
+
     for ox, oy in zip(Xs.flatten(), Ys.flatten()):
         ox_r, ox_l = ox + 6 * hx, ox - 6 * hx
 
