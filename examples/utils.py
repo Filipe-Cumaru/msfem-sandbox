@@ -73,7 +73,7 @@ class DiffusionFEMProblem(FEMProblem):
         return ngs.H1(self.mesh, dirichlet=".*")
 
     def _build_bilinear_form(self, u, v):
-        c = self.coeff()
+        c = self.coeff(self.mesh)
         return ngs.BilinearForm(c * ngs.grad(u) * ngs.grad(v) * ngs.dx).Assemble()
 
     def _build_linear_form(self, v):

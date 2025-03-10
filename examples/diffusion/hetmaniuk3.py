@@ -9,7 +9,7 @@ def coeff_eval(x, y):
     return ((2 + 1.8 * sx) / (2 + 1.8 * cy)) + ((2 + sy) / (2 + 1.8 * sx))
 
 
-def coeff_fem():
+def coeff_fem(_):
     sx, sy = ngs.sin(25 * ngs.pi * ngs.x), ngs.sin(25 * ngs.pi * ngs.y)
     cy = ngs.cos(25 * ngs.pi * ngs.y)
     c = ((2 + 1.8 * sx) / (2 + 1.8 * cy)) + ((2 + sy) / (2 + 1.8 * sx))

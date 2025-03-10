@@ -7,7 +7,7 @@ def coeff_eval(x, y):
     return 1 / (1.2 + np.cos(32 * np.pi * x * (1 - x) * y * (1 - y)))
 
 
-def coeff_fem():
+def coeff_fem(_):
     c = (1.2 + ngs.cos(32 * ngs.pi * ngs.x * (1 - ngs.x) * ngs.y * (1 - ngs.y))) ** -1
     return c
 
