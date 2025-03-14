@@ -196,7 +196,7 @@ def parse_args(example_description):
     parser.add_argument(
         "--output",
         action="store_true",
-        help="Enables the output. The solution will be saved in the `output` directory as a .npy file.",
+        help="Enables the output. The solution will be saved in the `output` directory as a .mat file.",
     )
 
     args = parser.parse_args()
@@ -359,7 +359,7 @@ def run_example(
     )
     it_counter = solvers.IterationsCounter(disp=False)
     x, Tn = solvers.cg(
-        A, b, M=M_as, tol=1e-8, maxiter=1000, callback=it_counter, return_lanczos=True
+        A, b, M=M_as, tol=1e-8, maxiter=int(1e5), callback=it_counter, return_lanczos=True
     )
 
     if output:
