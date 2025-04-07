@@ -1,8 +1,17 @@
 from typing import Callable, Any
 from scipy.io import savemat
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csc_matrix
 from scipy.sparse.linalg import LinearOperator
 from ngsolve.meshes import MakeQuadMesh
+
+try:
+    from metis import part_graph
+
+    HAS_METIS = True
+except ImportError:
+    HAS_METIS = False
+else:
+    import networkx as ntx
 
 import numpy as np
 import ngsolve as ngs
@@ -124,6 +133,47 @@ class LinearElasticityFEMProblem(FEMProblem):
         return ngs.CF(((s[0], s[2]), (s[2], s[1])), dims=(2, 2))
 
 
+def partition_mesh_with_metis(mesh, num_subdomains):
+    """Partition a NGSolve mesh using METIS.
+
+    Args:
+        mesh (ngsolve.comp.Mesh): A NGSolve mesh object.
+        num_subdomains (int): Number of subdomains to be generated.
+
+    Returns:
+        scipy.csc_matrix: A SciPy sparse CSC matrix representing the partition vectors.
+    """
+    # A finite element function space just so we have a definition for the
+    # mesh entities (faces, edges, etc.).
+    fes = ngs.H1(mesh, order=1)
+    num_dofs = fes.ndof
+
+    # The graph representing the connection between the mesh elements (faces
+    # for the 2D case).
+    G_vertices = mesh.faces
+    G_edges = [mesh[e].faces for e in mesh.edges if len(mesh[e].faces) > 1]
+    G = ntx.Graph()
+    G.add_nodes_from(G_vertices)
+    G.add_edges_from(G_edges)
+
+    _, subdomains = part_graph(G, num_subdomains)
+
+    # Initialization of the partition vectors for each subdomain.
+    P_col_idx = np.concatenate(
+        [[i] * len(el.dofs) for i, el in zip(subdomains, fes.Elements(ngs.VOL))]
+    )
+    P_row_idx = np.concatenate([el.dofs for el in fes.Elements(ngs.VOL)])
+    P_values = np.ones(len(P_col_idx))
+    P = csc_matrix((P_values, (P_row_idx, P_col_idx)), shape=(num_dofs, num_subdomains))
+
+    # Set all non-zero entries in P to 1. This is necessary because some entries
+    # in P_col_idx and P_row_idx might be repeated. The initialization of a
+    # csc_matrix adds up repeated entries.
+    P.data[:] = 1
+
+    return P
+
+
 def parse_args(example_description):
     parser = argparse.ArgumentParser(description=example_description)
     parser.add_argument(
@@ -174,7 +224,7 @@ def parse_args(example_description):
             "ams",
             "slab-msfem",
             "gdsw",
-            "spectral-ams"
+            "spectral-ams",
         ],
         default=None,
         required=False,
@@ -198,6 +248,12 @@ def parse_args(example_description):
         action="store_true",
         help="Enables the output. The solution will be saved in the `output` directory as a .mat file.",
     )
+    parser.add_argument(
+        "--use-metis",
+        action="store_true",
+        default=False,
+        help="Use METIS to partition the grid and generate the subdomains.",
+    )
 
     args = parser.parse_args()
     if args.precond == "two-level" and args.coarse_space is None:
@@ -220,6 +276,10 @@ def parse_args(example_description):
         parser.error(
             "Using the coarse space spectral-ams requires --enrichment-tol to be specified."
         )
+    if args.use_metis and not HAS_METIS:
+        parser.error(
+            "METIS must be installed to use it as the mesh partitioner. Please refer to the README in this project to see how to install all dependencies."
+        )
 
     return args
 
@@ -237,7 +297,8 @@ def run_example(
     coeff_eval: Callable,
     problem_type: msfem.NullSpaceType,
     output: bool,
-    enrichment_tol: float
+    enrichment_tol: float,
+    use_metis: bool,
 ):
     """Runs an example from the `examples` folder.
 
@@ -286,6 +347,10 @@ def run_example(
     b = b[ngs_dofs_map.flatten()]
 
     print("===> Done ✔.")
+
+    P = None
+    if use_metis:
+        P = partition_mesh_with_metis(fem_problem.mesh, Nx * Ny)
 
     if precond == "one-level":
         print("Initializing the preconditioner.")
@@ -359,7 +424,13 @@ def run_example(
     )
     it_counter = solvers.IterationsCounter(disp=False)
     x, Tn = solvers.cg(
-        A, b, M=M_as, tol=1e-8, maxiter=int(1e5), callback=it_counter, return_lanczos=True
+        A,
+        b,
+        M=M_as,
+        tol=1e-8,
+        maxiter=int(1e5),
+        callback=it_counter,
+        return_lanczos=True,
     )
 
     if output:
