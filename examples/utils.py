@@ -174,6 +174,45 @@ def partition_mesh_with_metis(mesh, num_subdomains):
     return P
 
 
+def partition_mesh(Nx, Ny, nx, ny, mx, my):
+    """Construct a structured partition of the mesh. The partition corresponds
+    to a `Nx` x `Ny` structured grid.
+
+    Args:
+        Nx (int): Number of subdomains (coarse cells) on the x-axis direction
+        Ny (int): Number of subdomains (coarse cells) on the y-axis direction
+        nx (int): Number of cells on the x-axis direction within each subdomain
+        ny (int): Number of cells on the y-axis direction within each subdomain
+        mx (int): Number of nodes on the mesh on the x-axis direction
+        my (int): Number of nodes on the mesh on the y-axis direction
+
+    Returns:
+        scipy.csc_matrix: A SciPy sparse CSC matrix representing the partition vectors.
+    """
+    # Since each subdomain is a square, the partition is computed by
+    # moving a "window" across the domain and assigning the nodes within
+    # the window to the subdomain.
+    ref_idx = np.arange(nx + 1, dtype=int)
+    ref_window = np.concatenate([ref_idx + j * mx for j in range(ny + 1)])
+
+    P_row_idx = []
+    P_col_idx = []
+    P_values = []
+
+    for i in range(Nx * Ny):
+        # Horizontal and vertical displacement of the reference window.
+        displ_horiz, displ_vert = i % Nx, i // Nx
+
+        # The nodes in the subdomain \Omega_i.
+        Omega_i = ref_window + (displ_horiz * nx) + (displ_vert * ny * mx)
+
+        P_row_idx.extend(Omega_i)
+        P_col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
+        P_values.extend(np.ones(len(Omega_i)))
+
+    return csc_matrix((P_values, (P_row_idx, P_col_idx)), shape=(mx * my, Nx * Ny))
+
+
 def parse_args(example_description):
     parser = argparse.ArgumentParser(description=example_description)
     parser.add_argument(
