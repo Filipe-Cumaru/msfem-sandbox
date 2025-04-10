@@ -261,7 +261,6 @@ def parse_args(example_description):
             "rgdsw-opt-1",
             "rgdsw-opt-2-2",
             "ams",
-            "slab-msfem",
             "gdsw",
             "spectral-ams",
         ],
@@ -413,18 +412,6 @@ def run_example(
             case "rgdsw-opt-2-2":
                 cs = msfem.RGDSWInverseDistanceCoarseSpace(
                     Nx + 1, Ny + 1, nx + 1, ny + 1, A, P, problem_type
-                )
-            case "slab-msfem":
-                cs = msfem.MsFEMSlabCoarseSpace(
-                    Nx + 1,
-                    Ny + 1,
-                    nx + 1,
-                    ny + 1,
-                    A,
-                    P,
-                    coeff_eval,
-                    slab_size,
-                    problem_type,
                 )
             case "ams":
                 cs = msfem.AMSCoarseSpace(

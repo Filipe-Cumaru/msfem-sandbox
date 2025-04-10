@@ -3,6 +3,7 @@ from scipy.integrate import quad
 from scipy.sparse.linalg import spsolve, factorized
 from scipy.linalg import eig
 from enum import Enum
+from warnings import warn
 import numpy as np
 
 
@@ -668,6 +669,12 @@ class MsFEMSlabCoarseSpace(MsFEMCoarseSpace):
         null_space_type=NullSpaceType.DIFFUSION,
         dofs_map=None,
     ):
+        warn(
+            "This class is deprecated and no longer supported.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         # The slab size in terms of the number of layers of elements.
         self.k = k
 
