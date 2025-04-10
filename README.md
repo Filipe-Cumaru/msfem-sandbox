@@ -6,10 +6,16 @@ A collection of coarse spaces for the two-level additive Schwarz preconditioner 
 
 ### Dependencies
 
-This project uses [Netgen/NGSolve](https://ngsolve.org/) in order to assemble the finite-element problem. It and all the remaining Python dependencies can be installed via:
+The main dependencies can be installed via:
 ```
 pip install -r requirements.txt
 ```
+
+If you want to use [METIS](https://github.com/KarypisLab/METIS) to partition the mesh and define the non-overlapping domain decomposition, also run:
+```
+pip install -r metis-requirements.txt
+```
+> METIS must be installed for the Python dependency to be installed correctly. Please refer to METIS' [documentation](https://github.com/KarypisLab/METIS/blob/master/README.md) on how to build and install it from source. For linux distributions, METIS is available through most package managers.
 
 ### Running the examples
 
