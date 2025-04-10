@@ -387,14 +387,15 @@ def run_example(
 
     print("===> Done ✔.")
 
-    P = None
     if use_metis:
         P = partition_mesh_with_metis(fem_problem.mesh, Nx * Ny)
+    else:
+        P = partition_mesh(Nx, Ny, nx, ny, mx, my)
 
     if precond == "one-level":
         print("Initializing the preconditioner.")
         precond_op = schwarz.OneLevelOASPreconditioner(
-            A, Nx, Ny, nx, ny, k, problem_type
+            A, Nx, Ny, nx, ny, k, P, problem_type
         )
         print("===> Done ✔.")
     elif precond == "two-level":
@@ -403,15 +404,15 @@ def run_example(
         match coarse_space:
             case "msfem":
                 cs = msfem.MsFEMCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, coeff_eval, problem_type
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, coeff_eval, P, problem_type
                 )
             case "rgdsw-opt-1":
                 cs = msfem.RGDSWConstantCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, P, problem_type
                 )
             case "rgdsw-opt-2-2":
                 cs = msfem.RGDSWInverseDistanceCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, P, problem_type
                 )
             case "slab-msfem":
                 cs = msfem.MsFEMSlabCoarseSpace(
@@ -420,13 +421,14 @@ def run_example(
                     nx + 1,
                     ny + 1,
                     A,
+                    P,
                     coeff_eval,
                     slab_size,
                     problem_type,
                 )
             case "ams":
                 cs = msfem.AMSCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, P, problem_type
                 )
             case "gdsw":
                 if problem_type is not msfem.NullSpaceType.DIFFUSION:
@@ -434,11 +436,18 @@ def run_example(
                         "The GDSW coarse space is currently only available for the diffusion problem."
                     )
                 cs = msfem.GDSWCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type
+                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, None, P, problem_type
                 )
             case "spectral-ams":
                 cs = msfem.SpectralAMSCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, problem_type, tol=enrichment_tol
+                    Nx + 1,
+                    Ny + 1,
+                    nx + 1,
+                    ny + 1,
+                    A,
+                    P,
+                    problem_type,
+                    tol=enrichment_tol,
                 )
             case _:
                 raise ValueError("Invalid coarse space.")
@@ -450,7 +459,7 @@ def run_example(
 
         print("Initializing the preconditioner.")
         precond_op = schwarz.TwoLevelOASPreconditioner(
-            A, Phi, Nx, Ny, nx, ny, k, problem_type
+            A, Phi, Nx, Ny, nx, ny, k, P, problem_type
         )
         print("===> Done ✔.")
 
