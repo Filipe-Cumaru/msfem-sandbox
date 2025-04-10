@@ -318,6 +318,10 @@ def parse_args(example_description):
         parser.error(
             "METIS must be installed to use it as the mesh partitioner. Please refer to the README in this project to see how to install all dependencies."
         )
+    if args.use_metis and args.coarse_space == "msfem":
+        parser.error(
+            "Currently, the MsFEM coarse spaces cannot be used with unstructured domain decompositions."
+        )
 
     return args
 
