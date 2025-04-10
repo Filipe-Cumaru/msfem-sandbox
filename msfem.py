@@ -92,6 +92,11 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
             zip(self.coarse_nodes_global_idx, range(len(self.coarse_nodes_global_idx)))
         )
 
+        # The set of interface nodes.
+        self.gamma = np.setdiff1d(
+            np.where(self.P_B.sum(axis=1) > 1)[0], self.boundary_fine_nodes
+        )
+
         self.xs, self.ys = np.meshgrid(
             np.linspace(0, 1, self.mx), np.linspace(0, 1, self.my)
         )
@@ -256,10 +261,7 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
         return interface_pou
 
     def _assemble_inverse_distance_matrix(self):
-        gamma = np.setdiff1d(
-            np.where(self.P_B.sum(axis=1) > 1)[0], self.boundary_fine_nodes
-        )
-        gamma = np.setdiff1d(gamma, self.coarse_nodes_global_idx)
+        gamma_no_coarse_nodes = np.setdiff1d(self.gamma, self.coarse_nodes_global_idx)
 
         D_row_idx = []
         D_col_idx = []
@@ -275,7 +277,7 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
                 > 1
             )
             local_interface = supp_nodes[gamma_mask]
-            gamma_nodes = np.intersect1d(local_interface, gamma)
+            gamma_nodes = np.intersect1d(local_interface, gamma_no_coarse_nodes)
 
             inv_dist = self._compute_inv_distances(
                 gamma_nodes, x_nc, y_nc, self.coarse_nodes[nc_global_idx]
@@ -525,16 +527,9 @@ class AMSCoarseSpace(RGDSWCoarseSpace):
 
     def _group_nodes_into_ams_classes(self):
         vertex_nodes = self.coarse_nodes_global_idx[:]
-        interface_nodes = np.setdiff1d(
-            np.where(self.P_B.sum(axis=1) > 1)[0], self.boundary_fine_nodes
-        )
-        interface_nodes = np.setdiff1d(interface_nodes, vertex_nodes)
-        edge_nodes = np.setdiff1d(
-            np.setdiff1d(interface_nodes, self.boundary_fine_nodes), vertex_nodes
-        )
+        edge_nodes = np.setdiff1d(self.gamma, vertex_nodes)
         interior_nodes = np.setdiff1d(
-            np.arange(self.mx * self.my, dtype=int),
-            np.union1d(edge_nodes, vertex_nodes),
+            np.arange(self.mx * self.my, dtype=int), self.gamma
         )
         return vertex_nodes, edge_nodes, interior_nodes
 
@@ -637,20 +632,9 @@ class AMSRGDSWCoarseSpace(RGDSWCoarseSpace):
 
     def _group_nodes_into_ams_classes(self):
         vertex_nodes = self.coarse_nodes_global_idx[:]
-        interface_nodes = np.array(
-            [
-                ni
-                for ni in range(self.mx * self.my)
-                if ((ni % self.mx) % (self.nx - 1)) == 0
-                or ((ni // self.mx) % (self.ny - 1)) == 0
-            ]
-        )
-        edge_nodes = np.setdiff1d(
-            np.setdiff1d(interface_nodes, self.boundary_fine_nodes), vertex_nodes
-        )
+        edge_nodes = np.setdiff1d(self.gamma, vertex_nodes)
         interior_nodes = np.setdiff1d(
-            np.arange(self.mx * self.my, dtype=int),
-            np.union1d(edge_nodes, vertex_nodes),
+            np.arange(self.mx * self.my, dtype=int), self.gamma
         )
         return vertex_nodes, edge_nodes, interior_nodes
 
@@ -733,24 +717,19 @@ class MsFEMSlabCoarseSpace(MsFEMCoarseSpace):
 
 class GDSWCoarseSpace(RGDSWCoarseSpace):
     def assemble_operator(self):
-        # Interface nodes
-        Gamma = np.setdiff1d(
-            np.where(self.P_B.sum(axis=1) > 1)[0], self.boundary_fine_nodes
-        )
-
         # Interior nodes
-        I = np.setdiff1d(np.arange(self.mx * self.my), Gamma)
+        I = np.setdiff1d(np.arange(self.mx * self.my), self.gamma)
 
         # Permutation indices
-        G = np.hstack((I, Gamma)).argsort()
+        G = np.hstack((I, self.gamma)).argsort()
 
         # Blocks for the discrete harmonic extension.
         A_II = self.A[I[:, None], I]
-        A_IGamma = self.A[I[:, None], Gamma]
+        A_IGamma = self.A[I[:, None], self.gamma]
 
         # Interface basis functions.
         Phi_Gamma_ext = self._assemble_interface_op()
-        Phi_Gamma = Phi_Gamma_ext[Gamma, :]
+        Phi_Gamma = Phi_Gamma_ext[self.gamma, :]
 
         # Compute the discrete harmonic extension from the
         # interface to the interior.
@@ -766,9 +745,7 @@ class GDSWCoarseSpace(RGDSWCoarseSpace):
         Phi_int_cols, Phi_int_rows = [], []
 
         # Set the interface values on the edges.
-        E = np.setdiff1d(
-            np.where(self.P_B.sum(axis=1) == 2)[0], self.boundary_fine_nodes
-        )
+        E = np.setdiff1d(self.gamma, self.coarse_nodes_global_idx)
         shared_edges = self.P_B[E, :].nonzero()[1].reshape((len(E), 2))
         sorted_edges = np.unique(shared_edges, axis=0)
         for i, (e1, e2) in enumerate(sorted_edges):
@@ -812,9 +789,7 @@ class SpectralAMSCoarseSpace(AMSCoarseSpace):
         tol=1e-3,
     ):
         super().__init__(Nx, Ny, nx, ny, A, P, null_space_type, dofs_map)
-        E = np.setdiff1d(
-            np.where(self.P_B.sum(axis=1) == 2)[0], self.boundary_fine_nodes
-        )
+        E = np.setdiff1d(self.gamma, self.coarse_nodes_global_idx)
         repeated_subdomain_pairs = self.P_B[E, :].nonzero()[1].reshape((len(E), 2))
         self.sorted_subdomain_pairs = np.unique(repeated_subdomain_pairs, axis=0)
         self.edge_entities = [
@@ -855,27 +830,22 @@ class SpectralAMSCoarseSpace(AMSCoarseSpace):
                 num_new_bfs += 1
 
         if num_new_bfs > 0:
-            # Interface nodes
-            Gamma = np.setdiff1d(
-                np.where(self.P_B.sum(axis=1) > 1)[0], self.boundary_fine_nodes
-            )
-
             # Interior nodes
-            I = np.setdiff1d(np.arange(self.mx * self.my), Gamma)
+            I = np.setdiff1d(np.arange(self.mx * self.my), self.gamma)
 
             # Permutation indices
-            G = np.hstack((I, Gamma)).argsort()
+            G = np.hstack((I, self.gamma)).argsort()
 
             # Blocks for the discrete harmonic extension.
             A_II = self.A[I[:, None], I]
-            A_IGamma = self.A[I[:, None], Gamma]
+            A_IGamma = self.A[I[:, None], self.gamma]
 
             # Interface basis functions.
             Phi_Gamma_ext = csc_matrix(
                 (Phi_vals, (Phi_rows, Phi_cols)),
                 shape=(self.mx * self.my, num_new_bfs),
             )
-            Phi_Gamma = Phi_Gamma_ext[Gamma, :]
+            Phi_Gamma = Phi_Gamma_ext[self.gamma, :]
 
             # Compute the discrete harmonic extension from the
             # interface to the interior.
