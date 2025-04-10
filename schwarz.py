@@ -17,6 +17,7 @@ class OneLevelOASPreconditioner(object):
         nx,
         ny,
         k,
+        P,
         null_space_type=NullSpaceType.DIFFUSION,
         dofs_map=None,
     ) -> None:
@@ -74,7 +75,7 @@ class OneLevelOASPreconditioner(object):
         self.boundary_nodes = np.where(self.M.sum(axis=1).A.flatten() == 1)[0]
 
         # A partition vector that splits the nodes into each subdmain.
-        self.P = self._compute_partitions()
+        self.P = P
 
         # A partition vector that splits the nodes into the overlapping subdmains.
         self.P_extended = self._compute_overlapping_partitions()
@@ -103,37 +104,6 @@ class OneLevelOASPreconditioner(object):
             y[Omega_i_extended_dofs] += y_i
 
         return y
-
-    def _compute_partitions(self):
-        """Sets `P`, a matrix that indicates the partition of the domain's
-        nodes into the non-overlapping subdomains.
-        """
-        # Since each subdomain is a square, the partition is computed by
-        # moving a "window" across the domain and assigning the nodes within
-        # the window to the subdomain.
-        ref_idx = np.arange(self.nx + 1, dtype=int)
-        ref_window = np.concatenate([ref_idx + j * self.mx for j in range(self.ny + 1)])
-
-        row_idx = []
-        col_idx = []
-        P_values = []
-
-        for i in range(self.Nx * self.Ny):
-            # Horizontal and vertical displacement of the reference window.
-            displ_horiz, displ_vert = i % self.Nx, i // self.Nx
-
-            # The nodes in the subdomain \Omega_i.
-            Omega_i = (
-                ref_window + (displ_horiz * self.nx) + (displ_vert * self.ny * self.mx)
-            )
-
-            row_idx.extend(Omega_i)
-            col_idx.extend(i * np.ones(len(Omega_i), dtype=int))
-            P_values.extend(np.ones(len(Omega_i)))
-
-        return csc_matrix(
-            (P_values, (row_idx, col_idx)), shape=(self.mx * self.my, self.Nx * self.Ny)
-        )
 
     def _compute_overlapping_partitions(self):
         row_idx = []
@@ -199,11 +169,20 @@ class TwoLevelOASPreconditioner(OneLevelOASPreconditioner):
         nx,
         ny,
         k,
+        P,
         null_space_type=NullSpaceType.DIFFUSION,
         dofs_map=None,
     ) -> None:
         super().__init__(
-            A, Nx, Ny, nx, ny, k, null_space_type=null_space_type, dofs_map=dofs_map
+            A,
+            Nx,
+            Ny,
+            nx,
+            ny,
+            k,
+            P,
+            null_space_type=null_space_type,
+            dofs_map=dofs_map,
         )
         self.Phi = Phi
         self.A_0_lu = splu(self.Phi @ (self.A @ self.Phi.transpose()))
