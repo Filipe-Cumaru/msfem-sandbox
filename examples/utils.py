@@ -470,6 +470,7 @@ def run_example(
         fname = (
             f"output_{mx - 1}x{my - 1}_{Nx}x{Ny}_{precond}"
             + (f"_{coarse_space}" if precond == "two-level" else "")
+            + ("_unstruct" if use_metis else "_struct")
             + ".mat"
         )
         out_dict = {"A": A, "b": b, "Tn": Tn, "x": x}
