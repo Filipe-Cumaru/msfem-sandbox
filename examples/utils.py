@@ -283,7 +283,7 @@ def parse_args(example_description):
         "--use-metis",
         action="store_true",
         default=False,
-        help="Use METIS to partition the grid and generate the subdomains.",
+        help="Use METIS to partition the grid and generate the subdomains. When using this option, the number of subdomains created is Nx * Ny and the mesh contains (Nx * nx) X (Ny * ny).",
     )
 
     args = parser.parse_args()
