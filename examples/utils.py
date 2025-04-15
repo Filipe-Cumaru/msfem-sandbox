@@ -268,13 +268,6 @@ def parse_args(example_description):
         required=False,
     )
     parser.add_argument(
-        "--slab-size",
-        type=int,
-        help="The number of layers of nodes used in the edge slab. Required if using the coarse space slab-msfem.",
-        default=None,
-        required=False,
-    )
-    parser.add_argument(
         "--enrichment-tol",
         type=float,
         help="The tolerance value used to select the eigenvalues related to the eigenmodes used in the spectral enrichment of AMS. Required if using the coarse space spectral-ams",
@@ -334,7 +327,6 @@ def run_example(
     k: int,
     precond: str,
     coarse_space: str,
-    slab_size: int,
     coeff_fem: Callable,
     coeff_eval: Callable,
     problem_type: msfem.NullSpaceType,
