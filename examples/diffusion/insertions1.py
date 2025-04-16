@@ -23,7 +23,7 @@ def coeff_eval(x, y):
     return 1e8 if np.any(coarse_node_check) else 1
 
 
-def coeff_fem(mesh):
+def coeff_fem(mesh, P):
     global Nx, Ny, nx, ny
     hx, hy = 1 / (Nx * nx), 1 / (Ny * ny)
     lx, ly = 2 * hx, 2 * hy
@@ -31,10 +31,14 @@ def coeff_fem(mesh):
     material_fes = ngs.L2(mesh, order=0)
     material_gf = ngs.GridFunction(material_fes)
 
-    Xs, Ys = np.meshgrid(np.linspace(0, 1, Nx + 1)[1:-1], 
-                         np.linspace(0, 1, Ny + 1)[1:-1])
-    elem_vertices = np.array([
-        [mesh[vID].point for vID in el.vertices] for el in mesh.Elements()])
+    xs, ys = np.meshgrid(np.linspace(0, 1, Nx * nx + 1), np.linspace(0, 1, Ny * ny + 1))
+    xs, ys = xs.flatten(), ys.flatten()
+    coarse_nodes = np.where(P.sum(axis=1) > 2)[0]
+    Xs, Ys = xs[coarse_nodes], ys[coarse_nodes]
+
+    elem_vertices = np.array(
+        [[mesh[vID].point for vID in el.vertices] for el in mesh.Elements()]
+    )
     mask = np.zeros(elem_vertices.shape[0], dtype=bool)
 
     for ox, oy in zip(Xs.flatten(), Ys.flatten()):
@@ -47,33 +51,10 @@ def coeff_fem(mesh):
     return ngs.CoefficientFunction(material_gf).Compile()
 
 
-def main(args):
-    global Nx, Ny, nx, ny
+if __name__ == "__main__":
+    args = parse_args("High coefficient inclusions on the coarse nodes.")
     Nx = args.Nx
     Ny = args.Ny
     nx = args.nx
     ny = args.ny
-    k = args.k
-    precond = args.precond
-    coarse_space = args.coarse_space
-    slab_size = args.slab_size
-    run_example(
-        Nx,
-        Ny,
-        nx,
-        ny,
-        k,
-        precond,
-        coarse_space,
-        slab_size,
-        coeff_fem,
-        coeff_eval,
-        problem_type=msfem.NullSpaceType.DIFFUSION,
-        output=args.output,
-        enrichment_tol=args.enrichment_tol
-    )
-
-
-if __name__ == "__main__":
-    args = parse_args("High coefficient inclusions on the coarse nodes.")
-    main(args)
+    run_example(args, coeff_fem, coeff_eval, msfem.NullSpaceType.DIFFUSION)

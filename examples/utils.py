@@ -122,7 +122,7 @@ class LinearElasticityFEMProblem(FEMProblem):
         #     dims=(3, 3),
         # )
         # return self._voigt2stress(C * self._strain2voigt(strain))
-        E, _, nu = self.coeff()
+        E, nu = self.coeff(self.mesh)
         Lambda, Mu = E * nu / ((1 + nu) * (1 - 2 * nu)), E / (2 * (1 + nu))
         return Lambda * ngs.Trace(strain) * ngs.Id(2) + 2 * Mu * strain
 
@@ -320,53 +320,44 @@ def parse_args(example_description):
 
 
 def run_example(
-    Nx: int,
-    Ny: int,
-    nx: int,
-    ny: int,
-    k: int,
-    precond: str,
-    coarse_space: str,
+    args: argparse.Namespace,
     coeff_fem: Callable,
     coeff_eval: Callable,
     problem_type: msfem.NullSpaceType,
-    output: bool,
-    enrichment_tol: float,
-    use_metis: bool,
 ):
     """Runs an example from the `examples` folder.
 
     Args:
-        Nx (int): The number of subdomains on the x-axis direction.
-        Ny (int): The number of subdomains on the y-axis direction.
-        nx (int): The number of cells on the x-axis direction within each subdomain.
-        ny (int): The number of cells on the y-axis direction within each subdomain.
-        k (int): The number of overlapping layers for each subdomain, i.e., the overlap size.
-        precond (str): The preconditioning method to be used.
-        coarse_space (str): The coarse space used to compute the basis functions.
-        slab_size (int): The number of layers of nodes used in the edge slab. Required if using the coarse space slab-msfem.
-        coeff_fem (Callable): A callable object that computes the coefficient function using DOLFINx. Required if using a MsFEM coarse space.
-        coeff_eval (Callable): A callable object that evaluates the coefficient function nodally. Required if using a MsFEM coarse space.
+        args (argparse.Namespace): The input arguments passed by the command line.
+        coeff_fem (Callable): A callable object that computes the coefficient function using ngsolve.
+        coeff_eval (Callable): A callable object that evaluates the coefficient function nodally.
         problem_type (msfem.NullSpaceType): The problem type to be run (diffusion or linear elasticity).
     """
     # Number of nodes on each direction (mx x my grid).
-    mx = Nx * nx + 1
-    my = Ny * ny + 1
+    mx = args.Nx * args.nx + 1
+    my = args.Ny * args.ny + 1
 
     print("Assembling the FE problem.")
 
     # Initialization of an instance of a FEM problem.
+    coeff_fem_lambda = lambda mesh: coeff_fem(mesh, P)
     match problem_type:
         case msfem.NullSpaceType.DIFFUSION:
-            fem_problem = DiffusionFEMProblem(mx - 1, my - 1, coeff_fem)
+            fem_problem = DiffusionFEMProblem(mx - 1, my - 1, coeff_fem_lambda)
             num_dofs_per_node = 1
         case msfem.NullSpaceType.LINEAR_ELASTICITY:
-            fem_problem = LinearElasticityFEMProblem(mx - 1, my - 1, coeff_fem)
+            fem_problem = LinearElasticityFEMProblem(mx - 1, my - 1, coeff_fem_lambda)
             num_dofs_per_node = 2
         case _:
             raise ValueError(
                 "The problem type must be either diffusion or linear elasticity."
             )
+
+    # Partition the mesh.
+    if args.use_metis:
+        P = partition_mesh_with_metis(fem_problem.mesh, args.Nx * args.Ny)
+    else:
+        P = partition_mesh(args.Nx, args.Ny, args.nx, args.ny, mx, my)
 
     # Assemble the FE system of equations.
     A, b = fem_problem.assemble()
@@ -382,36 +373,56 @@ def run_example(
 
     print("===> Done ✔.")
 
-    if use_metis:
-        P = partition_mesh_with_metis(fem_problem.mesh, Nx * Ny)
-    else:
-        P = partition_mesh(Nx, Ny, nx, ny, mx, my)
-
-    if precond == "one-level":
+    if args.precond == "one-level":
         print("Initializing the preconditioner.")
         precond_op = schwarz.OneLevelOASPreconditioner(
-            A, Nx, Ny, nx, ny, k, P, problem_type
+            A, args.Nx, args.Ny, args.nx, args.ny, args.k, P, problem_type
         )
         print("===> Done ✔.")
-    elif precond == "two-level":
+    elif args.precond == "two-level":
         # Initialization of the coarse space.
         print("Initializing the coarse space.")
-        match coarse_space:
+        match args.coarse_space:
             case "msfem":
                 cs = msfem.MsFEMCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, coeff_eval, P, problem_type
+                    args.Nx + 1,
+                    args.Ny + 1,
+                    args.nx + 1,
+                    args.ny + 1,
+                    A,
+                    coeff_eval,
+                    P,
+                    problem_type,
                 )
             case "rgdsw-opt-1":
                 cs = msfem.RGDSWConstantCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, P, problem_type
+                    args.Nx + 1,
+                    args.Ny + 1,
+                    args.nx + 1,
+                    args.ny + 1,
+                    A,
+                    P,
+                    problem_type
                 )
             case "rgdsw-opt-2-2":
                 cs = msfem.RGDSWInverseDistanceCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, P, problem_type
+                    args.Nx + 1,
+                    args.Ny + 1,
+                    args.nx + 1,
+                    args.ny + 1,
+                    A,
+                    P,
+                    problem_type,
                 )
             case "ams":
                 cs = msfem.AMSCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, P, problem_type
+                    args.Nx + 1,
+                    args.Ny + 1,
+                    args.nx + 1,
+                    args.ny + 1,
+                    A,
+                    P,
+                    problem_type,
                 )
             case "gdsw":
                 if problem_type is not msfem.NullSpaceType.DIFFUSION:
@@ -419,18 +430,25 @@ def run_example(
                         "The GDSW coarse space is currently only available for the diffusion problem."
                     )
                 cs = msfem.GDSWCoarseSpace(
-                    Nx + 1, Ny + 1, nx + 1, ny + 1, A, None, P, problem_type
+                    args.Nx + 1,
+                    args.Ny + 1,
+                    args.nx + 1,
+                    args.ny + 1,
+                    A,
+                    None,
+                    P,
+                    problem_type,
                 )
             case "spectral-ams":
                 cs = msfem.SpectralAMSCoarseSpace(
-                    Nx + 1,
-                    Ny + 1,
-                    nx + 1,
-                    ny + 1,
+                    args.Nx + 1,
+                    args.Ny + 1,
+                    args.nx + 1,
+                    args.ny + 1,
                     A,
                     P,
                     problem_type,
-                    tol=enrichment_tol,
+                    tol=args.enrichment_tol,
                 )
             case _:
                 raise ValueError("Invalid coarse space.")
@@ -442,7 +460,7 @@ def run_example(
 
         print("Initializing the preconditioner.")
         precond_op = schwarz.TwoLevelOASPreconditioner(
-            A, Phi, Nx, Ny, nx, ny, k, P, problem_type
+            A, Phi, args.Nx, args.Ny, args.nx, args.ny, args.k, P, problem_type
         )
         print("===> Done ✔.")
 
@@ -450,7 +468,7 @@ def run_example(
     print("Solving the system of equations.")
     M_as = (
         LinearOperator(A.shape, lambda x: precond_op.apply(x))
-        if precond != "none"
+        if args.precond != "none"
         else None
     )
     it_counter = solvers.IterationsCounter(disp=False)
@@ -464,18 +482,18 @@ def run_example(
         return_lanczos=True,
     )
 
-    if output:
+    if args.output:
         if not os.path.exists("./output"):
             os.mkdir("./output")
         fname = (
-            f"output_{mx - 1}x{my - 1}_{Nx}x{Ny}_{precond}"
-            + (f"_{coarse_space}" if precond == "two-level" else "")
-            + ("_unstruct" if use_metis else "_struct")
+            f"output_{mx - 1}x{my - 1}_{args.Nx}x{args.Ny}_{args.precond}"
+            + (f"_{args.coarse_space}" if args.precond == "two-level" else "")
+            + ("_unstruct" if args.use_metis else "_struct")
             + ".mat"
         )
         out_dict = {"A": A, "b": b, "Tn": Tn, "x": x}
 
-        if precond == "two-level":
+        if args.precond == "two-level":
             out_dict["Phi"] = Phi
 
         savemat(f"./output/{fname}", out_dict)
