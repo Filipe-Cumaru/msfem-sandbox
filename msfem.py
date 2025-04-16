@@ -168,7 +168,6 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
             # between interior and boundary nodes of \Omega_i.
             Ai_IB = self.A[Omega_i_boundary_dofs, Omega_i_interior_dofs[:, None]]
 
-            # for c, c_idx in zip(Omega_i_coarse_nodes, coarse_nodes_idx):
             for c in Omega_i_coarse_nodes:
                 c_local_idx = self.coarse_nodes[c]
 
@@ -226,7 +225,6 @@ class RGDSWCoarseSpace(BaseCoarseSpace):
                 Phi[c_null_space_idx, Omega_i_dofs] = Psi_ic.T
                 Phi[c_null_space_idx, Omega_i_interior_dofs] -= Phi_i_IB_inc.T
 
-        # Restrict the prolongation operator to the coarse nodes.
         Phi = Phi.tocsc()
 
         return Phi
