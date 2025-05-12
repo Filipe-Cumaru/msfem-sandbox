@@ -283,7 +283,7 @@ def parse_args(example_description):
         "--use-metis",
         action="store_true",
         default=False,
-        help="Use METIS to partition the grid and generate the subdomains. When using this option, the number of subdomains created is Nx * Ny and the mesh contains (Nx * nx) X (Ny * ny).",
+        help="Use METIS to partition the grid and generate the subdomains. When using this option, the number of subdomains created is Nx * Ny and the mesh contains (Nx * nx) X (Ny * ny) cells.",
     )
 
     args = parser.parse_args()
@@ -402,7 +402,7 @@ def run_example(
                     args.ny + 1,
                     A,
                     P,
-                    problem_type
+                    problem_type,
                 )
             case "rgdsw-opt-2-2":
                 cs = msfem.RGDSWInverseDistanceCoarseSpace(

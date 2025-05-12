@@ -11,11 +11,13 @@ The main dependencies can be installed via:
 pip install -r requirements.txt
 ```
 
-If you want to use [METIS](https://github.com/KarypisLab/METIS) to partition the mesh and define the non-overlapping domain decomposition, also run:
+To use [METIS](https://github.com/KarypisLab/METIS) to define the non-overlapping domain decomposition, also run:
 ```
 pip install -r metis-requirements.txt
 ```
 > METIS must be installed for the Python dependency to be installed correctly. Please refer to METIS' [documentation](https://github.com/KarypisLab/METIS/blob/master/README.md) on how to build and install it from source. For linux distributions, METIS is available through most package managers.
+
+> All examples can be executed without METIS. By default, a structured rectangular domain decomposition is employed.
 
 ### Running the examples
 
