@@ -1,6 +1,6 @@
 from typing import Callable, Any
 from scipy.io import savemat
-from scipy.sparse import coo_matrix, csc_matrix
+from scipy.sparse import coo_matrix, csc_matrix, diags
 from scipy.sparse.linalg import LinearOperator
 from ngsolve.meshes import MakeQuadMesh
 
@@ -65,10 +65,18 @@ class FEMProblem(object):
 
         # Set boundary conditions.
         boundary_dofs = np.nonzero(~fes.FreeDofs())[0]
-        A[boundary_dofs, :] *= 0  # type: ignore
-        A[:, boundary_dofs] *= 0  # type: ignore
-        A[boundary_dofs, boundary_dofs] = 1
+        mask = np.ones(A.shape[0])
+        mask[boundary_dofs] = 0
+        
+        M = diags(mask)
+        A = M @ A @ M
+        
+        diag_A = A.diagonal()
+        diag_A[boundary_dofs] = 1
+        A.setdiag(diag_A)
+        
         A.eliminate_zeros()
+        
         b[boundary_dofs] = 0
 
         return A, b
