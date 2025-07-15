@@ -76,6 +76,7 @@ class FEMProblem(object):
         A.setdiag(diag_A)
         
         A.eliminate_zeros()
+        A = A.tocsc()
         
         b[boundary_dofs] = 0
 
