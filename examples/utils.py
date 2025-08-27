@@ -67,17 +67,18 @@ class FEMProblem(object):
         boundary_dofs = np.nonzero(~fes.FreeDofs())[0]
         mask = np.ones(A.shape[0])
         mask[boundary_dofs] = 0
-        
-        M = diags(mask)
-        A = M @ A @ M
-        
+
+        msfem.set_sparse_matrix_rows_to_value(A, boundary_dofs, 0)
+        A = A.tocsr()
+        msfem.set_sparse_matrix_rows_to_value(A, boundary_dofs, 0)
+
         diag_A = A.diagonal()
         diag_A[boundary_dofs] = 1
         A.setdiag(diag_A)
-        
+
         A.eliminate_zeros()
         A = A.tocsc()
-        
+
         b[boundary_dofs] = 0
 
         return A, b
