@@ -97,14 +97,12 @@ Much of the work done in this repository is based on the references below.
    keywords = {MsFV, AMS, MPFA-D, Unstructured grids, Background grid, Reservoir simulation}
 }
 
-@misc{Alves2024,
-   title={A computational study of algebraic coarse spaces for two-level overlapping additive Schwarz preconditioners}, 
-   author={Filipe A. C. S. Alves and Alexander Heinlein and Hadi Hajibeygi},
-   year={2024},
-   eprint={2408.08187},
-   archivePrefix={arXiv},
-   primaryClass={math.NA},
-   url={https://arxiv.org/abs/2408.08187}, 
+@inproceedings{
+   title = {A Computational Study of Algebraic Coarse Spaces for Two-Level Overlapping Additive Schwarz Preconditioners},
+   author = {Filipe Cumaru and Alexander Heinlein and Hadi Hajibeygi},
+   year = {2025},
+   booktitle = {Proceedings of the 28th International Conference on Domain Decomposition Methods at KAUST, Saudi Arabia},
+   url = {https://www.ddm.org/DD28/proceedings/DD28_198.pdf}
 }
 ```
 
